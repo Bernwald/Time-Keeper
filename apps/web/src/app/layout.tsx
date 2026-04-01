@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/layout/shell";
@@ -15,10 +15,15 @@ const dmSans = DM_Sans({
   display: "swap",
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
   title: "Time Keeper",
   description: "AI-Ready Knowledge & Operations Platform",
-  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
