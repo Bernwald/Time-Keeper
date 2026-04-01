@@ -1,18 +1,26 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #f4f1ea;
-  --panel: #fffdf8;
-  --panel-strong: #ffffff;
-  --line: #d8d0c3;
-  --text: #1b1a16;
-  --muted: #645d51;
-  --accent: #1f6b5f;
-  --accent-soft: #dcefe8;
-  --shadow: 0 16px 40px rgba(37, 29, 16, 0.08);
-  --radius-lg: 24px;
-  --radius-md: 18px;
-  --radius-sm: 12px;
+@theme {
+  --color-bg: #f4f1ea;
+  --color-panel: #fffdf8;
+  --color-panel-strong: #ffffff;
+  --color-line: #d8d0c3;
+  --color-text: #1b1a16;
+  --color-muted: #645d51;
+  --color-accent: #1f6b5f;
+  --color-accent-soft: #dcefe8;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+
+  --radius-card: 16px;
+  --radius-modal: 24px;
+  --radius-sm: 8px;
+
+  --shadow-card: 0 4px 24px rgba(37, 29, 16, 0.07);
+  --shadow-modal: 0 16px 40px rgba(37, 29, 16, 0.12);
 }
 
 * {
@@ -22,9 +30,10 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: system-ui, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -32,9 +41,6 @@ a {
   text-decoration: none;
 }
 
-button,
-input,
-select,
-textarea {
+button, input, select, textarea {
   font: inherit;
 }
