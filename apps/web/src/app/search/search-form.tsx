@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { input, btn } from "@/components/ui/table-classes";
+import { input, btn, styles } from "@/components/ui/table-classes";
 
 export function SearchForm({ initialQuery }: { initialQuery: string }) {
   const [query, setQuery] = useState(initialQuery);
@@ -16,25 +16,16 @@ export function SearchForm({ initialQuery }: { initialQuery: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
+    <form onSubmit={handleSubmit} className="flex gap-2 animate-fade-in">
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Begriff suchen …"
         className={input.base}
-        style={{
-          borderColor: "var(--color-line)",
-          background: "var(--color-panel)",
-          color: "var(--color-text)",
-          flex: 1,
-        }}
+        style={{ ...styles.input, flex: 1, borderColor: "var(--color-line-soft)" }}
         autoFocus
       />
-      <button
-        type="submit"
-        className={btn.primary}
-        style={{ background: "var(--color-accent)", color: "#fff" }}
-      >
+      <button type="submit" className={btn.primary} style={styles.accent}>
         Suchen
       </button>
     </form>

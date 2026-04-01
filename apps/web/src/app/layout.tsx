@@ -16,8 +16,9 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Time Keeper Platform",
+  title: "Time Keeper",
   description: "AI-Ready Knowledge & Operations Platform",
+  viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

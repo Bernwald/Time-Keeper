@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createCompany } from "@/app/actions";
-import { card, btn, input } from "@/components/ui/table-classes";
+import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export default function NewCompanyPage() {
   const [pending, setPending] = useState(false);
@@ -12,97 +13,52 @@ export default function NewCompanyPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
-    try {
-      await createCompany(new FormData(e.currentTarget));
-    } catch {
-      // redirect expected
-    } finally {
-      setPending(false);
-    }
+    try { await createCompany(new FormData(e.currentTarget)); } catch { /* redirect */ } finally { setPending(false); }
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8 max-w-xl">
-      <div>
-        <h1
-          className="text-2xl font-semibold"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-        >
-          Neues Unternehmen
-        </h1>
+    <div className={page.narrow}>
+      <div className="animate-fade-in">
+        <Link href="/companies" className="text-xs font-medium mb-2 inline-block" style={{ color: "var(--color-accent)" }}>← Zurück</Link>
+        <h1 className="text-2xl font-semibold" style={styles.title}>Neues Unternehmen</h1>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className={`${card.base} flex flex-col gap-5`}
-        style={{ background: "var(--color-panel)", border: "1px solid var(--color-line)" }}
-      >
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Name *</label>
-          <input
-            name="name"
-            required
-            placeholder="z. B. Acme GmbH"
-            className={input.base}
-            style={{ borderColor: "var(--color-line)", background: "var(--color-panel-strong)", color: "var(--color-text)" }}
-          />
-        </div>
+      <form onSubmit={handleSubmit} className={`${card.base} flex flex-col gap-5 animate-slide-up`} style={styles.panel}>
+        <Field label="Name *" name="name" required placeholder="z. B. Acme GmbH" />
+        <Field label="Website" name="website" type="url" placeholder="https://…" />
+        <StatusSelect />
+        <Field label="Notizen" name="notes" textarea rows={4} placeholder="Interne Notizen (optional)" />
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Website</label>
-          <input
-            name="website"
-            type="url"
-            placeholder="https://…"
-            className={input.base}
-            style={{ borderColor: "var(--color-line)", background: "var(--color-panel-strong)", color: "var(--color-text)" }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Status</label>
-          <select
-            name="status"
-            defaultValue="active"
-            className={input.base}
-            style={{ borderColor: "var(--color-line)", background: "var(--color-panel-strong)", color: "var(--color-text)" }}
-          >
-            <option value="active">Aktiv</option>
-            <option value="inactive">Inaktiv</option>
-            <option value="archived">Archiviert</option>
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Notizen</label>
-          <textarea
-            name="notes"
-            rows={4}
-            placeholder="Interne Notizen (optional)"
-            className={input.textarea}
-            style={{ borderColor: "var(--color-line)", background: "var(--color-panel-strong)", color: "var(--color-text)" }}
-          />
-        </div>
-
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            type="submit"
-            disabled={pending}
-            className={btn.primary}
-            style={{ background: "var(--color-accent)", color: "#fff", opacity: pending ? 0.6 : 1 }}
-          >
-            {pending ? "Wird gespeichert …" : "Unternehmen anlegen"}
+        <div className="flex items-center gap-3 pt-2">
+          <button type="submit" disabled={pending} className={btn.primary} style={{ ...styles.accent, opacity: pending ? 0.6 : 1 }}>
+            {pending ? "Wird gespeichert …" : "Anlegen"}
           </button>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className={btn.ghost}
-            style={{ color: "var(--color-muted)" }}
-          >
-            Abbrechen
-          </button>
+          <button type="button" onClick={() => router.back()} className={btn.ghost} style={{ color: "var(--color-muted)" }}>Abbrechen</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function Field({ label, textarea, ...props }: { label: string; textarea?: boolean; [k: string]: unknown }) {
+  const Tag = textarea ? "textarea" : "input";
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className={input.label} style={{ color: "var(--color-text)" }}>{label}</label>
+      <Tag className={textarea ? input.textarea : input.base} style={styles.input} {...props as Record<string, unknown>} />
+    </div>
+  );
+}
+
+function StatusSelect({ defaultValue = "active" }: { defaultValue?: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className={input.label} style={{ color: "var(--color-text)" }}>Status</label>
+      <select name="status" defaultValue={defaultValue} className={input.base} style={styles.input}>
+        <option value="active">Aktiv</option>
+        <option value="inactive">Inaktiv</option>
+        <option value="archived">Archiviert</option>
+      </select>
     </div>
   );
 }

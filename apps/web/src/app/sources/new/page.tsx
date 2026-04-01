@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createTextSource, createTranscriptSource, createPdfSource } from "@/app/actions";
-import { card, btn, input } from "@/components/ui/table-classes";
+import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 
 type SourceType = "text" | "transcript" | "pdf";
 
@@ -22,47 +23,46 @@ export default function NewSourcePage() {
     e.preventDefault();
     setPending(true);
     try {
-      const formData = new FormData(e.currentTarget);
-      if (activeTab === "text") await createTextSource(formData);
-      else if (activeTab === "transcript") await createTranscriptSource(formData);
-      else await createPdfSource(formData);
+      const fd = new FormData(e.currentTarget);
+      if (activeTab === "text") await createTextSource(fd);
+      else if (activeTab === "transcript") await createTranscriptSource(fd);
+      else await createPdfSource(fd);
     } catch {
-      // redirect throws — this is expected
+      // redirect throws
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8 max-w-2xl">
-      {/* Header */}
-      <div>
-        <h1
-          className="text-2xl font-semibold leading-tight"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-        >
+    <div className={page.narrow}>
+      <div className="animate-fade-in">
+        <Link href="/sources" className="text-xs font-medium mb-2 inline-block" style={{ color: "var(--color-accent)" }}>
+          ← Zurück zu Quellen
+        </Link>
+        <h1 className="text-2xl font-semibold" style={styles.title}>
           Neue Quelle
         </h1>
-        <p className="text-sm mt-0.5" style={{ color: "var(--color-muted)" }}>
-          Inhalt hinzufügen und in die Wissensbasis aufnehmen.
+        <p className="text-sm mt-0.5" style={styles.muted}>
+          Inhalt hinzufügen und automatisch indexieren.
         </p>
       </div>
 
       {/* Type tabs */}
       <div
-        className="flex gap-1 p-1 rounded-xl"
-        style={{ background: "var(--color-line)" }}
+        className="flex gap-1 p-1 rounded-[var(--radius-card)] animate-fade-in"
+        style={{ background: "var(--color-bg-elevated)" }}
       >
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className="flex-1 rounded-lg text-sm font-medium py-2 transition-colors min-h-[44px]"
+            className="flex-1 rounded-[var(--radius-md)] text-sm font-medium py-2.5 transition-all min-h-[44px]"
             style={{
               background: activeTab === tab.id ? "var(--color-panel-strong)" : "transparent",
               color: activeTab === tab.id ? "var(--color-text)" : "var(--color-muted)",
-              boxShadow: activeTab === tab.id ? "var(--shadow-card)" : "none",
+              boxShadow: activeTab === tab.id ? "var(--shadow-sm)" : "none",
             }}
           >
             {tab.label}
@@ -71,110 +71,63 @@ export default function NewSourcePage() {
       </div>
 
       {/* Form */}
-      <form
-        onSubmit={handleSubmit}
-        className={`${card.base} flex flex-col gap-5`}
-        style={{
-          background: "var(--color-panel)",
-          border: "1px solid var(--color-line)",
-          boxShadow: "var(--shadow-card)",
-        }}
-      >
-        {/* Common fields */}
+      <form onSubmit={handleSubmit} className={`${card.base} flex flex-col gap-5 animate-slide-up`} style={styles.panel}>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
-            Titel *
-          </label>
-          <input
-            name="title"
-            required
-            placeholder="z. B. Kundenpräsentation Q2"
-            className={input.base}
-            style={{
-              borderColor: "var(--color-line)",
-              background: "var(--color-panel-strong)",
-              color: "var(--color-text)",
-            }}
-          />
+          <label className={input.label} style={{ color: "var(--color-text)" }}>Titel *</label>
+          <input name="title" required placeholder="z. B. Kundenpräsentation Q2" className={input.base} style={styles.input} />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
-            Beschreibung
-          </label>
-          <input
-            name="description"
-            placeholder="Kurze Beschreibung (optional)"
-            className={input.base}
-            style={{
-              borderColor: "var(--color-line)",
-              background: "var(--color-panel-strong)",
-              color: "var(--color-text)",
-            }}
-          />
+          <label className={input.label} style={{ color: "var(--color-text)" }}>Beschreibung</label>
+          <input name="description" placeholder="Kurze Beschreibung (optional)" className={input.base} style={styles.input} />
         </div>
 
-        {/* Text / Transcript content */}
         {(activeTab === "text" || activeTab === "transcript") && (
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
+            <label className={input.label} style={{ color: "var(--color-text)" }}>
               {activeTab === "transcript" ? "Transkript" : "Text"} *
             </label>
             <textarea
               name="raw_text"
               required
-              rows={12}
-              placeholder={
-                activeTab === "transcript"
-                  ? "Füge hier das vollständige Transkript ein …"
-                  : "Füge hier deinen Text ein …"
-              }
+              rows={10}
+              placeholder={activeTab === "transcript" ? "Transkript einfügen …" : "Text einfügen …"}
               className={input.textarea}
-              style={{
-                borderColor: "var(--color-line)",
-                background: "var(--color-panel-strong)",
-                color: "var(--color-text)",
-                minHeight: "220px",
-              }}
+              style={{ ...styles.input, minHeight: "200px" }}
             />
           </div>
         )}
 
-        {/* PDF upload */}
         {activeTab === "pdf" && (
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
-              PDF-Datei *
-            </label>
-            <input
-              name="file"
-              type="file"
-              accept="application/pdf"
-              required
-              className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium cursor-pointer min-h-[44px] flex items-center"
-              style={{
-                color: "var(--color-text)",
-              }}
-            />
-            <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-              Maximale Größe: 10 MB. Text wird automatisch extrahiert.
-            </p>
+            <label className={input.label} style={{ color: "var(--color-text)" }}>PDF-Datei *</label>
+            <div
+              className="rounded-[var(--radius-md)] border-2 border-dashed p-6 text-center transition-colors"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-bg)" }}
+            >
+              <input
+                name="file"
+                type="file"
+                accept="application/pdf"
+                required
+                className="text-sm cursor-pointer min-h-[44px]"
+                style={{ color: "var(--color-text)" }}
+              />
+              <p className="text-xs mt-2" style={styles.muted}>
+                Max. 10 MB · Text wird automatisch extrahiert
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
             disabled={pending}
             className={btn.primary}
-            style={{
-              background: "var(--color-accent)",
-              color: "#fff",
-              opacity: pending ? 0.6 : 1,
-            }}
+            style={{ ...styles.accent, opacity: pending ? 0.6 : 1 }}
           >
-            {pending ? "Wird gespeichert …" : "Quelle hinzufügen"}
+            {pending ? "Wird verarbeitet …" : "Quelle hinzufügen"}
           </button>
           <button
             type="button"

@@ -1,153 +1,105 @@
 import Link from "next/link";
 import { listSources } from "@/lib/db/queries/sources";
-import { card, badge, btn } from "@/components/ui/table-classes";
+import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
-const SOURCE_TYPE_LABEL: Record<string, string> = {
-  text: "Text",
-  transcript: "Transkript",
-  pdf: "PDF",
+const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
+const STATUS_LABEL: Record<string, string> = { ready: "Bereit", processing: "Verarbeitung", pending: "Ausstehend", error: "Fehler" };
+const TYPE_STYLE: Record<string, { bg: string; color: string }> = {
+  text: { bg: "var(--color-accent-soft)", color: "var(--color-accent)" },
+  transcript: { bg: "var(--color-info-soft)", color: "var(--color-info)" },
+  pdf: { bg: "var(--color-warning-soft)", color: "var(--color-warning)" },
 };
-
-const STATUS_LABEL: Record<string, string> = {
-  ready: "Bereit",
-  processing: "Verarbeitung",
-  pending: "Ausstehend",
-  error: "Fehler",
+const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  ready: { bg: "var(--color-success-soft)", color: "var(--color-success)" },
+  processing: { bg: "var(--color-warning-soft)", color: "var(--color-warning)" },
+  pending: { bg: "var(--color-bg-elevated)", color: "var(--color-muted)" },
+  error: { bg: "var(--color-danger-soft)", color: "var(--color-danger)" },
 };
-
-function TypeBadge({ type }: { type: string }) {
-  const colors: Record<string, { bg: string; text: string }> = {
-    text: { bg: "var(--color-accent-soft)", text: "var(--color-accent)" },
-    transcript: { bg: "#e0eaff", text: "#2d5be3" },
-    pdf: { bg: "#fef3c7", text: "#b45309" },
-  };
-  const c = colors[type] ?? colors.text;
-  return (
-    <span
-      className={badge.base}
-      style={{ background: c.bg, color: c.text }}
-    >
-      {SOURCE_TYPE_LABEL[type] ?? type}
-    </span>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, { bg: string; text: string }> = {
-    ready: { bg: "var(--color-accent-soft)", text: "var(--color-accent)" },
-    processing: { bg: "#fef3c7", text: "#b45309" },
-    pending: { bg: "#f3f4f6", text: "#6b7280" },
-    error: { bg: "var(--color-danger-soft)", text: "var(--color-danger)" },
-  };
-  const c = colors[status] ?? colors.pending;
-  return (
-    <span
-      className={badge.base}
-      style={{ background: c.bg, color: c.text }}
-    >
-      {STATUS_LABEL[status] ?? status}
-    </span>
-  );
-}
 
 export default async function SourcesPage() {
   const sources = await listSources();
 
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1
-            className="text-2xl font-semibold leading-tight"
-            style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-          >
+    <div className={page.wrapper}>
+      <div className={page.headerRow}>
+        <div className={`${page.header} animate-fade-in`}>
+          <h1 className="text-2xl md:text-3xl font-semibold" style={styles.title}>
             Quellen
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--color-muted)" }}>
+          <p className="text-sm" style={styles.muted}>
             {sources.length} {sources.length === 1 ? "Quelle" : "Quellen"} gespeichert
           </p>
         </div>
-        <Link
-          href="/sources/new"
-          className={btn.primary}
-          style={{ background: "var(--color-accent)", color: "#fff" }}
-        >
+        <Link href="/sources/new" className={btn.primary} style={styles.accent}>
           + Neue Quelle
         </Link>
       </div>
 
-      {/* Empty state */}
       {sources.length === 0 && (
         <div
-          className={`${card.base} flex flex-col items-center justify-center gap-3 py-16 text-center`}
-          style={{ background: "var(--color-panel)", border: "1px solid var(--color-line)" }}
+          className={`${card.base} flex flex-col items-center justify-center gap-3 py-12 md:py-16 text-center animate-scale-in`}
+          style={styles.panel}
         >
+          <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={styles.accentSoft}>
+            +
+          </div>
           <p className="text-base font-medium" style={{ color: "var(--color-text)" }}>
             Noch keine Quellen vorhanden
           </p>
-          <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+          <p className="text-sm max-w-xs" style={styles.muted}>
             Füge Texte, Transkripte oder PDFs hinzu, um die Wissensbasis aufzubauen.
           </p>
-          <Link
-            href="/sources/new"
-            className={btn.primary}
-            style={{ background: "var(--color-accent)", color: "#fff", marginTop: "0.5rem" }}
-          >
+          <Link href="/sources/new" className={btn.primary} style={{ ...styles.accent, marginTop: "0.25rem" }}>
             Erste Quelle hinzufügen
           </Link>
         </div>
       )}
 
-      {/* Source list */}
       {sources.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {sources.map((source) => (
-            <Link
-              key={source.id}
-              href={`/sources/${source.id}`}
-              className={`${card.hover} flex items-start justify-between gap-4`}
-              style={{
-                background: "var(--color-panel)",
-                border: "1px solid var(--color-line)",
-                boxShadow: "var(--shadow-card)",
-                textDecoration: "none",
-              }}
-            >
-              <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                <span
-                  className="text-base font-medium truncate"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {source.title}
-                </span>
-                {source.description && (
-                  <span
-                    className="text-sm line-clamp-2"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    {source.description}
-                  </span>
-                )}
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <TypeBadge type={source.source_type} />
-                  <StatusBadge status={source.status} />
-                  {source.word_count != null && (
-                    <span className="text-xs" style={{ color: "var(--color-muted)" }}>
-                      {source.word_count.toLocaleString("de-DE")} Wörter
+        <div className="flex flex-col gap-2.5 stagger-children">
+          {sources.map((s) => {
+            const tStyle = TYPE_STYLE[s.source_type] ?? TYPE_STYLE.text;
+            const sStyle = STATUS_STYLE[s.status] ?? STATUS_STYLE.pending;
+            return (
+              <Link
+                key={s.id}
+                href={`/sources/${s.id}`}
+                className={card.hover}
+                style={styles.panel}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <span className="text-[15px] font-medium truncate" style={{ color: "var(--color-text)" }}>
+                      {s.title}
                     </span>
-                  )}
+                    {s.description && (
+                      <span className="text-sm line-clamp-2" style={styles.muted}>
+                        {s.description}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className={badge.pill} style={{ background: tStyle.bg, color: tStyle.color }}>
+                        {TYPE_LABEL[s.source_type] ?? s.source_type}
+                      </span>
+                      <span className={badge.pill} style={{ background: sStyle.bg, color: sStyle.color }}>
+                        {STATUS_LABEL[s.status] ?? s.status}
+                      </span>
+                      {s.word_count != null && (
+                        <span className="text-[11px]" style={styles.muted}>
+                          {s.word_count.toLocaleString("de-DE")} Wörter
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[11px] shrink-0 mt-0.5" style={styles.muted}>
+                    {new Date(s.created_at).toLocaleDateString("de-DE", {
+                      day: "2-digit", month: "short", year: "numeric",
+                    })}
+                  </span>
                 </div>
-              </div>
-              <span className="text-xs shrink-0 mt-1" style={{ color: "var(--color-muted)" }}>
-                {new Date(source.created_at).toLocaleDateString("de-DE", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </span>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { chatAnswer } from "./actions";
 import type { ChatResponse } from "@/lib/ai/chat";
-import { card, badge, btn, input } from "@/components/ui/table-classes";
+import { card, badge, btn, input, styles } from "@/components/ui/table-classes";
 
 type Message =
   | { role: "user"; text: string }
@@ -13,60 +13,57 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, pending]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const q = question.trim();
     if (!q || pending) return;
-
-    setMessages((prev) => [...prev, { role: "user", text: q }]);
+    setMessages((p) => [...p, { role: "user", text: q }]);
     setQuestion("");
     setPending(true);
-
     try {
       const response = await chatAnswer(q);
-      setMessages((prev) => [...prev, { role: "assistant", response }]);
+      setMessages((p) => [...p, { role: "assistant", response }]);
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          response: { type: "chunks", items: [] },
-        },
-      ]);
+      setMessages((p) => [...p, { role: "assistant", response: { type: "chunks", items: [] } }]);
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="flex flex-col h-full min-h-screen">
+    <div className="flex flex-col h-[100dvh] md:h-full md:min-h-[100dvh]">
       {/* Header */}
       <div
-        className="p-6 border-b"
-        style={{ borderColor: "var(--color-line)", background: "var(--color-panel)" }}
+        className="shrink-0 px-4 md:px-6 py-4 border-b"
+        style={{ borderColor: "var(--color-line-soft)", background: "var(--color-panel)" }}
       >
-        <h1
-          className="text-2xl font-semibold"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-        >
-          Chat
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: "var(--color-muted)" }}>
-          Stelle Fragen — die Antwort kommt aus deiner Wissensbasis.
+        <h1 className="text-lg md:text-xl font-semibold" style={styles.title}>Chat</h1>
+        <p className="text-xs mt-0.5" style={styles.muted}>
+          Fragen an deine Wissensbasis stellen.
         </p>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 flex flex-col gap-4 p-6 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center py-16">
+          <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center py-12 animate-scale-in">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center text-xl"
+              style={styles.accentSoft}
+            >
+              ?
+            </div>
             <p className="text-base font-medium" style={{ color: "var(--color-text)" }}>
               Stell eine Frage
             </p>
-            <p className="text-sm max-w-sm" style={{ color: "var(--color-muted)" }}>
-              Durchsucht automatisch alle Quellen und liefert die relevantesten Textabschnitte —
-              oder eine KI-Antwort, wenn ein API-Key hinterlegt ist.
+            <p className="text-sm max-w-sm" style={styles.muted}>
+              Die Antwort kommt aus deinen Quellen — mit KI-Antwort wenn ein API-Key hinterlegt ist.
             </p>
           </div>
         )}
@@ -74,10 +71,10 @@ export default function ChatPage() {
         {messages.map((msg, i) => {
           if (msg.role === "user") {
             return (
-              <div key={i} className="flex justify-end">
+              <div key={i} className="flex justify-end animate-slide-up">
                 <div
-                  className="rounded-xl px-4 py-3 max-w-[80%] text-sm"
-                  style={{ background: "var(--color-accent)", color: "#fff" }}
+                  className="rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] md:max-w-[70%] text-sm"
+                  style={styles.accent}
                 >
                   {msg.text}
                 </div>
@@ -89,29 +86,16 @@ export default function ChatPage() {
 
           if (response.type === "answer") {
             return (
-              <div key={i} className="flex flex-col gap-3">
-                <div
-                  className={card.base}
-                  style={{
-                    background: "var(--color-panel)",
-                    border: "1px solid var(--color-line)",
-                    boxShadow: "var(--shadow-card)",
-                  }}
-                >
+              <div key={i} className="max-w-[90%] md:max-w-[80%] animate-slide-up">
+                <div className={card.flat} style={styles.panel}>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-text)" }}>
                     {response.text}
                   </p>
                   {response.sources.length > 0 && (
-                    <div className="mt-3 pt-3 flex flex-wrap gap-1.5" style={{ borderTop: "1px solid var(--color-line)" }}>
-                      <span className="text-xs" style={{ color: "var(--color-muted)" }}>Quellen:</span>
-                      {[...new Set(response.sources.map((s) => s.source_title))].map((title) => (
-                        <span
-                          key={title}
-                          className={badge.base}
-                          style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
-                        >
-                          {title}
-                        </span>
+                    <div className="mt-3 pt-3 flex flex-wrap gap-1.5" style={{ borderTop: "1px solid var(--color-line-soft)" }}>
+                      <span className="text-[11px]" style={styles.muted}>Quellen:</span>
+                      {[...new Set(response.sources.map((s) => s.source_title))].map((t) => (
+                        <span key={t} className={badge.pill} style={styles.accentSoft}>{t}</span>
                       ))}
                     </div>
                   )}
@@ -120,38 +104,20 @@ export default function ChatPage() {
             );
           }
 
-          // type === "chunks"
           return (
-            <div key={i} className="flex flex-col gap-2">
+            <div key={i} className="flex flex-col gap-2 max-w-[90%] md:max-w-[80%] animate-slide-up">
               {response.items.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-                  Keine relevanten Textabschnitte gefunden.
-                </p>
+                <p className="text-sm" style={styles.muted}>Keine relevanten Abschnitte gefunden.</p>
               ) : (
                 <>
-                  <p className="text-xs font-medium" style={{ color: "var(--color-muted)" }}>
-                    Relevante Abschnitte:
-                  </p>
-                  {response.items.map((chunk) => (
-                    <div
-                      key={chunk.id}
-                      className={card.base}
-                      style={{
-                        background: "var(--color-panel)",
-                        border: "1px solid var(--color-line)",
-                      }}
-                    >
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span
-                          className={badge.base}
-                          style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
-                        >
-                          {chunk.source_title}
-                        </span>
-                      </div>
+                  <p className="text-[11px] font-medium" style={styles.muted}>Relevante Abschnitte:</p>
+                  {response.items.map((c) => (
+                    <div key={c.id} className={card.flat} style={styles.panel}>
+                      <span className={`${badge.pill} mb-1.5 inline-block`} style={styles.accentSoft}>
+                        {c.source_title}
+                      </span>
                       <p className="text-sm leading-relaxed" style={{ color: "var(--color-text)" }}>
-                        {chunk.chunk_text.slice(0, 300)}
-                        {chunk.chunk_text.length > 300 ? " …" : ""}
+                        {c.chunk_text.slice(0, 300)}{c.chunk_text.length > 300 ? " …" : ""}
                       </p>
                     </div>
                   ))}
@@ -162,18 +128,21 @@ export default function ChatPage() {
         })}
 
         {pending && (
-          <div className="flex items-center gap-2 px-4 py-3">
-            <span className="text-sm" style={{ color: "var(--color-muted)" }}>
-              Suche läuft …
-            </span>
+          <div className="flex items-center gap-2 animate-fade-in">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-accent)" }} />
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-accent)", animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-accent)", animationDelay: "300ms" }} />
+            </div>
+            <span className="text-xs" style={styles.muted}>Suche läuft …</span>
           </div>
         )}
       </div>
 
       {/* Input */}
       <div
-        className="p-4 border-t pb-[env(safe-area-inset-bottom)]"
-        style={{ borderColor: "var(--color-line)", background: "var(--color-panel)" }}
+        className="shrink-0 px-4 md:px-6 py-3 border-t pb-[calc(12px+env(safe-area-inset-bottom))] md:pb-3"
+        style={{ borderColor: "var(--color-line-soft)", background: "var(--color-panel)" }}
       >
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -182,22 +151,13 @@ export default function ChatPage() {
             placeholder="Frage stellen …"
             disabled={pending}
             className={input.base}
-            style={{
-              borderColor: "var(--color-line)",
-              background: "var(--color-panel-strong)",
-              color: "var(--color-text)",
-              flex: 1,
-            }}
+            style={{ ...styles.input, flex: 1, borderColor: "var(--color-line-soft)" }}
           />
           <button
             type="submit"
             disabled={pending || !question.trim()}
             className={btn.primary}
-            style={{
-              background: "var(--color-accent)",
-              color: "#fff",
-              opacity: pending || !question.trim() ? 0.5 : 1,
-            }}
+            style={{ ...styles.accent, opacity: pending || !question.trim() ? 0.5 : 1 }}
           >
             Senden
           </button>
