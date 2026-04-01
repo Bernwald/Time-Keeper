@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
 );
 
 CREATE OR REPLACE FUNCTION public.is_member_of_org(target_org_id UUID)
-RETURNS BOOLEAN LANGUAGE sql STABLE AS $$
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.organization_members
     WHERE organization_id = target_org_id AND user_id = auth.uid()
