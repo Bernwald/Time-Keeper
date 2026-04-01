@@ -1,7 +1,11 @@
-// Graceful: returns null if OPENAI_API_KEY is not set
+// Graceful: returns null if no OpenAI key is set
+
+function getOpenAIKey(): string | undefined {
+  return process.env.OPENAI_RESEARCH_TIMEKEEPER_KEY ?? process.env.OPENAI_API_KEY;
+}
 
 export async function embedText(text: string): Promise<number[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = getOpenAIKey();
   if (!apiKey) return null;
 
   try {
@@ -17,6 +21,10 @@ export async function embedText(text: string): Promise<number[] | null> {
   }
 }
 
+export function getOpenAIKeyForChat(): string | undefined {
+  return getOpenAIKey();
+}
+
 export function hasEmbeddingKey(): boolean {
-  return !!process.env.OPENAI_API_KEY;
+  return !!getOpenAIKey();
 }

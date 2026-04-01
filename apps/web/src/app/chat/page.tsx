@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { chatAnswer } from "./actions";
-import type { ChatResponse } from "@/lib/ai/chat";
+import { chatAnswer, getAvailableModels } from "./actions";
+import type { ChatResponse, ModelId } from "@/lib/ai/chat";
 import { card, badge, btn, input, styles } from "@/components/ui/table-classes";
+
+type ModelOption = { id: ModelId; label: string; available: boolean };
 
 type Message =
   | { role: "user"; text: string }
@@ -13,7 +15,18 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [pending, setPending] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<ModelId>("claude");
+  const [models, setModels] = useState<ModelOption[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    getAvailableModels().then((m) => {
+      setModels(m);
+      // Default to first available model
+      const first = m.find((x) => x.available);
+      if (first) setSelectedModel(first.id);
+    });
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -27,7 +40,7 @@ export default function ChatPage() {
     setQuestion("");
     setPending(true);
     try {
-      const response = await chatAnswer(q);
+      const response = await chatAnswer(q, selectedModel);
       setMessages((p) => [...p, { role: "assistant", response }]);
     } catch {
       setMessages((p) => [...p, { role: "assistant", response: { type: "chunks", items: [] } }]);
@@ -40,13 +53,35 @@ export default function ChatPage() {
     <div className="flex flex-col h-[100dvh] md:h-full md:min-h-[100dvh]">
       {/* Header */}
       <div
-        className="shrink-0 px-4 md:px-6 py-4 border-b"
+        className="shrink-0 px-4 md:px-6 py-4 border-b flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
         style={{ borderColor: "var(--color-line-soft)", background: "var(--color-panel)" }}
       >
-        <h1 className="text-lg md:text-xl font-semibold" style={styles.title}>Chat</h1>
-        <p className="text-xs mt-0.5" style={styles.muted}>
-          Fragen an deine Wissensbasis stellen.
-        </p>
+        <div>
+          <h1 className="text-lg md:text-xl font-semibold" style={styles.title}>Chat</h1>
+          <p className="text-xs mt-0.5" style={styles.muted}>
+            Fragen an deine Wissensbasis stellen.
+          </p>
+        </div>
+
+        {/* Model selector */}
+        {models.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            {models.filter((m) => m.available).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSelectedModel(m.id)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all min-h-[36px]"
+                style={{
+                  background: selectedModel === m.id ? "var(--color-accent)" : "var(--color-bg-elevated)",
+                  color: selectedModel === m.id ? "var(--color-accent-text)" : "var(--color-muted)",
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -63,7 +98,7 @@ export default function ChatPage() {
               Stell eine Frage
             </p>
             <p className="text-sm max-w-sm" style={styles.muted}>
-              Die Antwort kommt aus deinen Quellen — mit KI-Antwort wenn ein API-Key hinterlegt ist.
+              Die Antwort kommt aus deinen Quellen — mit Hybrid-Suche (Volltext + Semantik).
             </p>
           </div>
         )}
@@ -91,14 +126,19 @@ export default function ChatPage() {
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-text)" }}>
                     {response.text}
                   </p>
-                  {response.sources.length > 0 && (
-                    <div className="mt-3 pt-3 flex flex-wrap gap-1.5" style={{ borderTop: "1px solid var(--color-line-soft)" }}>
-                      <span className="text-[11px]" style={styles.muted}>Quellen:</span>
-                      {[...new Set(response.sources.map((s) => s.source_title))].map((t) => (
-                        <span key={t} className={badge.pill} style={styles.accentSoft}>{t}</span>
-                      ))}
-                    </div>
-                  )}
+                  <div className="mt-3 pt-3 flex flex-wrap items-center gap-1.5" style={{ borderTop: "1px solid var(--color-line-soft)" }}>
+                    <span className={badge.pill} style={{ background: "var(--color-bg-elevated)", color: "var(--color-muted)" }}>
+                      {response.model === "claude" ? "Claude" : response.model}
+                    </span>
+                    {response.sources.length > 0 && (
+                      <>
+                        <span className="text-[11px]" style={styles.muted}>Quellen:</span>
+                        {[...new Set(response.sources.map((s) => s.source_title))].map((t) => (
+                          <span key={t} className={badge.pill} style={styles.accentSoft}>{t}</span>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );
