@@ -23,6 +23,16 @@ function IconSources({ size = 20 }: { size?: number }) {
   );
 }
 
+function IconImport({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
 function IconSearch({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -86,6 +96,7 @@ const groups: NavGroup[] = [
     label: "Wissen",
     items: [
       { href: "/sources", label: "Quellen", icon: IconSources },
+      { href: "/sources/import", label: "Import", icon: IconImport },
       { href: "/search", label: "Suche", icon: IconSearch },
       { href: "/chat", label: "Chat", icon: IconChat },
     ],

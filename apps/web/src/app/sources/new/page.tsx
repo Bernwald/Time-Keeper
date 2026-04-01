@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createTextSource, createTranscriptSource, createPdfSource } from "@/app/actions";
+import { createTextSource, createTranscriptSource, createPdfSource, createMultiplePdfSources } from "@/app/actions";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 
 type SourceType = "text" | "transcript" | "pdf";
@@ -17,20 +17,44 @@ const TABS: { id: SourceType; label: string }[] = [
 export default function NewSourcePage() {
   const [activeTab, setActiveTab] = useState<SourceType>("text");
   const [pending, setPending] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState("");
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPending(true);
+    setPdfProgress("");
     try {
       const fd = new FormData(e.currentTarget);
-      if (activeTab === "text") await createTextSource(fd);
-      else if (activeTab === "transcript") await createTranscriptSource(fd);
-      else await createPdfSource(fd);
+
+      if (activeTab === "pdf") {
+        const fileInput = e.currentTarget.querySelector('input[type="file"]') as HTMLInputElement;
+        const files = fileInput?.files;
+        if (files && files.length > 1) {
+          // Multi-PDF upload
+          for (let i = 0; i < files.length; i++) {
+            setPdfProgress(`${i + 1} von ${files.length} …`);
+            const singleFd = new FormData();
+            singleFd.set("title", files[i].name.replace(/\.pdf$/i, ""));
+            singleFd.set("description", "");
+            singleFd.set("file", files[i]);
+            await createPdfSource(singleFd);
+          }
+          setPdfProgress("");
+          router.push("/sources");
+          return;
+        }
+        await createPdfSource(fd);
+      } else if (activeTab === "text") {
+        await createTextSource(fd);
+      } else {
+        await createTranscriptSource(fd);
+      }
     } catch {
       // redirect throws
     } finally {
       setPending(false);
+      setPdfProgress("");
     }
   }
 
@@ -109,13 +133,19 @@ export default function NewSourcePage() {
                 name="file"
                 type="file"
                 accept="application/pdf"
+                multiple
                 required
                 className="text-sm cursor-pointer min-h-[44px]"
                 style={{ color: "var(--color-text)" }}
               />
               <p className="text-xs mt-2" style={styles.muted}>
-                Max. 10 MB · Text wird automatisch extrahiert
+                Max. 10 MB pro Datei · Mehrere PDFs möglich · Text wird automatisch extrahiert
               </p>
+              {pdfProgress && (
+                <p className="text-xs mt-1 font-medium" style={{ color: "var(--color-accent)" }}>
+                  Verarbeite PDF {pdfProgress}
+                </p>
+              )}
             </div>
           </div>
         )}

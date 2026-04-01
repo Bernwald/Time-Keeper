@@ -30,9 +30,14 @@ export default async function SourcesPage() {
             {sources.length} {sources.length === 1 ? "Quelle" : "Quellen"} gespeichert
           </p>
         </div>
-        <Link href="/sources/new" className={btn.primary} style={styles.accent}>
-          + Neue Quelle
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/sources/import" className={btn.secondary} style={{ background: "var(--color-bg-elevated)", color: "var(--color-text)" }}>
+            Bulk-Import
+          </Link>
+          <Link href="/sources/new" className={btn.primary} style={styles.accent}>
+            + Neue Quelle
+          </Link>
+        </div>
       </div>
 
       {sources.length === 0 && (

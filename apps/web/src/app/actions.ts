@@ -178,6 +178,84 @@ export async function backfillEmbeddings(sourceId: string) {
   return { updated };
 }
 
+// ─── BATCH IMPORT ────────────────────────────────────────────────────
+
+export type ImportRow = {
+  title: string;
+  content: string;
+  sourceType?: string;
+  linkType?: string;   // 'company' | 'contact' | 'project'
+  linkId?: string;     // UUID of the entity to link
+};
+
+export type BatchImportResult = {
+  total: number;
+  imported: number;
+  errors: string[];
+};
+
+export async function batchImportSources(rows: ImportRow[]): Promise<BatchImportResult> {
+  const db = createServiceClient();
+  const result: BatchImportResult = { total: rows.length, imported: 0, errors: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row.title?.trim() || !row.content?.trim()) {
+      result.errors.push(`Zeile ${i + 1}: Titel oder Inhalt fehlt`);
+      continue;
+    }
+
+    try {
+      // Create source
+      const wordCount = row.content.trim().split(/\s+/).filter(Boolean).length;
+      const { data, error } = await db
+        .from("sources")
+        .insert({
+          organization_id: DEFAULT_ORG_ID,
+          title: row.title.trim(),
+          source_type: row.sourceType || "text",
+          raw_text: row.content.trim(),
+          word_count: wordCount,
+          status: "processing",
+        })
+        .select("id")
+        .single();
+
+      if (error || !data) {
+        result.errors.push(`Zeile ${i + 1}: ${error?.message ?? "Fehler beim Anlegen"}`);
+        continue;
+      }
+
+      // Chunk + embed
+      await storeChunks(data.id, row.content);
+
+      // Mark ready
+      await db.from("sources").update({ status: "ready" }).eq("id", data.id);
+
+      // Optional entity link
+      if (row.linkType && row.linkId) {
+        await db.from("source_links").upsert(
+          {
+            organization_id: DEFAULT_ORG_ID,
+            source_id: data.id,
+            linked_type: row.linkType,
+            linked_id: row.linkId,
+            link_role: "reference",
+          },
+          { onConflict: "source_id,linked_type,linked_id" },
+        );
+      }
+
+      result.imported++;
+    } catch (err) {
+      result.errors.push(`Zeile ${i + 1}: ${err instanceof Error ? err.message : "Unbekannter Fehler"}`);
+    }
+  }
+
+  revalidatePath("/sources");
+  return result;
+}
+
 // ─── SOURCE LINKS ────────────────────────────────────────────────────
 
 export async function addSourceLink(sourceId: string, linkedType: string, linkedId: string) {
