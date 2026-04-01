@@ -4,21 +4,20 @@ import { Nav, MobileNav } from "./nav";
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row">
-      {/* ── Desktop sidebar (hidden on mobile) ── */}
+      {/* ── Desktop sidebar ── */}
       <aside
         className="hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] overflow-y-auto"
         style={{
           width: "var(--sidebar-w)",
-          borderRight: "1px solid var(--color-line-soft)",
-          background: "var(--color-panel)",
+          borderRight: "1px solid var(--color-line)",
+          background: "#fff",
         }}
       >
-        {/* Brand */}
-        <div className="p-5 pb-2">
-          <Link href="/" className="flex items-center gap-2.5 group">
+        <div className="p-5 pb-3">
+          <Link href="/" className="flex items-center gap-3 group">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
-              style={{ background: "var(--color-accent)", color: "var(--color-accent-text)" }}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 gradient-accent"
+              style={{ color: "#fff", boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)" }}
             >
               TK
             </div>
@@ -29,39 +28,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
               >
                 Time Keeper
               </span>
-              <span className="text-[11px] leading-tight" style={{ color: "var(--color-muted)" }}>
+              <span className="text-[11px] leading-tight" style={{ color: "var(--color-placeholder)" }}>
                 Knowledge Platform
               </span>
             </div>
           </Link>
         </div>
 
-        {/* Navigation */}
-        <div className="flex-1 px-3 py-4">
+        <div className="flex-1 px-3 py-3 overflow-y-auto">
           <Nav />
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t" style={{ borderColor: "var(--color-line-soft)" }}>
-          <p className="text-[11px]" style={{ color: "var(--color-placeholder)" }}>
-            v0.1 · AI-Ready Platform
-          </p>
+        <div className="p-4 border-t" style={{ borderColor: "var(--color-line)" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-success)" }} />
+            <p className="text-[11px]" style={{ color: "var(--color-placeholder)" }}>
+              v0.1 · System bereit
+            </p>
+          </div>
         </div>
       </aside>
 
-      {/* ── Mobile header (hidden on desktop) ── */}
+      {/* ── Mobile header ── */}
       <header
         className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 glass"
         style={{
           height: "var(--header-h)",
-          borderBottom: "1px solid var(--color-line-soft)",
-          background: "rgba(255, 253, 248, 0.85)",
+          borderBottom: "1px solid var(--color-line)",
+          background: "rgba(255, 255, 255, 0.8)",
         }}
       >
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2.5">
           <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-            style={{ background: "var(--color-accent)", color: "var(--color-accent-text)" }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold gradient-accent"
+            style={{ color: "#fff" }}
           >
             TK
           </div>
@@ -74,7 +74,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Link>
       </header>
 
-      {/* ── Main content ── */}
+      {/* ── Main ── */}
       <main
         className="flex-1 min-w-0 pb-[calc(var(--bottom-nav-h)+env(safe-area-inset-bottom))] md:pb-0"
         style={{ background: "var(--color-bg)" }}
@@ -82,7 +82,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* ── Mobile bottom nav (hidden on desktop) ── */}
       <MobileNav />
     </div>
   );

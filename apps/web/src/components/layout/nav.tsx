@@ -159,17 +159,24 @@ function NavLink({
   return (
     <Link
       href={item.href}
-      className="flex items-center gap-2.5 min-h-[40px] px-3 rounded-lg text-[13px] font-medium transition-all"
+      className="flex items-center gap-2.5 min-h-[40px] px-3 rounded-xl text-[13px] font-medium transition-all"
       style={{
         background: active ? "var(--color-accent-soft)" : "transparent",
-        color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+        color: active ? "var(--color-accent)" : "var(--color-muted)",
+        fontWeight: active ? 600 : 500,
         transition: `all var(--duration-fast) var(--ease-out)`,
       }}
       onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.background = "var(--color-bg-elevated)";
+        if (!active) {
+          e.currentTarget.style.background = "var(--color-bg-elevated)";
+          e.currentTarget.style.color = "var(--color-text)";
+        }
       }}
       onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.background = "transparent";
+        if (!active) {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--color-muted)";
+        }
       }}
     >
       <Icon size={18} />
