@@ -147,6 +147,37 @@ export async function createPdfSource(formData: FormData) {
   redirect(`/sources/${data.id}`);
 }
 
+// ─── EMBEDDING BACKFILL ──────────────────────────────────────────────
+
+export async function backfillEmbeddings(sourceId: string) {
+  const db = createServiceClient();
+
+  // Fetch chunks without embeddings for this source
+  const { data: chunks, error } = await db
+    .from("content_chunks")
+    .select("id, chunk_text")
+    .eq("source_id", sourceId)
+    .is("embedding", null)
+    .order("chunk_index");
+
+  if (error || !chunks || chunks.length === 0) return { updated: 0 };
+
+  let updated = 0;
+  for (const chunk of chunks) {
+    const embedding = await embedText(chunk.chunk_text);
+    if (embedding) {
+      await db
+        .from("content_chunks")
+        .update({ embedding: JSON.stringify(embedding) })
+        .eq("id", chunk.id);
+      updated++;
+    }
+  }
+
+  revalidatePath(`/sources/${sourceId}`);
+  return { updated };
+}
+
 // ─── SOURCE LINKS ────────────────────────────────────────────────────
 
 export async function addSourceLink(sourceId: string, linkedType: string, linkedId: string) {

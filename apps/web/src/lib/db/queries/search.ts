@@ -66,3 +66,33 @@ export async function boostedHybridSearch(
   if (error) throw error;
   return (data ?? []) as ChunkSearchResult[];
 }
+
+// Direct chunk retrieval by source IDs (fallback when search finds nothing)
+export async function chunksBySourceIds(
+  sourceIds: string[],
+  limit = 20,
+): Promise<ChunkSearchResult[]> {
+  if (sourceIds.length === 0) return [];
+
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("content_chunks")
+    .select("id, source_id, chunk_index, chunk_text, sources!inner(title, source_type)")
+    .in("source_id", sourceIds)
+    .eq("organization_id", DEFAULT_ORG_ID)
+    .order("source_id")
+    .order("chunk_index")
+    .limit(limit);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    source_id: row.source_id,
+    chunk_index: row.chunk_index,
+    chunk_text: row.chunk_text,
+    source_title: row.sources.title,
+    source_type: row.sources.source_type,
+    rank: 1,
+  }));
+}

@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSourceById } from "@/lib/db/queries/sources";
-import { listChunksBySource } from "@/lib/db/queries/chunks";
+import { listChunksBySource, countChunksWithoutEmbeddings } from "@/lib/db/queries/chunks";
 import { listLinksForSource } from "@/lib/db/queries/source-links";
 import { listCompanies } from "@/lib/db/queries/companies";
 import { listContacts } from "@/lib/db/queries/contacts";
 import { listProjects } from "@/lib/db/queries/projects";
 import { deleteSource } from "@/app/actions";
 import { SourceLinks } from "./source-links";
+import { BackfillButton } from "./backfill-button";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
 const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
@@ -15,9 +16,10 @@ const STATUS_LABEL: Record<string, string> = { ready: "Bereit", processing: "Ver
 
 export default async function SourceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [source, chunks, links, companies, contacts, projects] = await Promise.all([
+  const [source, chunks, missingEmbeddings, links, companies, contacts, projects] = await Promise.all([
     getSourceById(id),
     listChunksBySource(id),
+    countChunksWithoutEmbeddings(id),
     listLinksForSource(id),
     listCompanies(),
     listContacts(),
@@ -98,12 +100,23 @@ export default async function SourceDetailPage({ params }: { params: Promise<{ i
 
       {/* Chunks */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>Chunks</h2>
-          <span className="text-xs" style={styles.muted}>
-            {chunks.length} {chunks.length === 1 ? "Abschnitt" : "Abschnitte"}
-          </span>
+          <div className="flex items-center gap-2">
+            {missingEmbeddings > 0 && (
+              <span className={badge.pill} style={styles.warning}>
+                {missingEmbeddings} ohne Embedding
+              </span>
+            )}
+            <span className="text-xs" style={styles.muted}>
+              {chunks.length} {chunks.length === 1 ? "Abschnitt" : "Abschnitte"}
+            </span>
+          </div>
         </div>
+
+        {missingEmbeddings > 0 && (
+          <BackfillButton sourceId={id} />
+        )}
 
         {chunks.length === 0 && (
           <p className="text-sm py-4" style={styles.muted}>

@@ -22,3 +22,15 @@ export async function listChunksBySource(sourceId: string): Promise<Chunk[]> {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function countChunksWithoutEmbeddings(sourceId: string): Promise<number> {
+  const db = createServiceClient();
+  const { count, error } = await db
+    .from("content_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("source_id", sourceId)
+    .is("embedding", null);
+
+  if (error) return 0;
+  return count ?? 0;
+}
