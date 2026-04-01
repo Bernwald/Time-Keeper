@@ -2,6 +2,8 @@ import { hybridSearch } from "@/lib/db/queries/search";
 import { SearchForm } from "./search-form";
 import { card, badge, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 export default async function SearchPage({
   searchParams,
 }: {

@@ -1,6 +1,8 @@
 import { getAdminStats, listOrganizations } from "@/lib/db/queries/admin";
 import Link from "next/link";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminDashboard() {
   const [stats, orgs] = await Promise.all([getAdminStats(), listOrganizations()]);
 

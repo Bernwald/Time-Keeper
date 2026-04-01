@@ -5,6 +5,8 @@ import { listSourcesForEntity } from "@/lib/db/queries/source-links";
 import { updateContact, deleteContact } from "@/app/actions";
 import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [contact, linkedSources] = await Promise.all([

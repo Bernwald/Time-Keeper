@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listCompanies } from "@/lib/db/queries/companies";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 const STATUS: Record<string, { label: string; style: { background: string; color: string } }> = {
   active: { label: "Aktiv", style: { background: "var(--color-success-soft)", color: "var(--color-success)" } },
   inactive: { label: "Inaktiv", style: { background: "var(--color-bg-elevated)", color: "var(--color-muted)" } },

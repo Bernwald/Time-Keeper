@@ -5,6 +5,8 @@ import { listContacts } from "@/lib/db/queries/contacts";
 import { listProjects } from "@/lib/db/queries/projects";
 import { btn, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
   const [sources, companies, contacts, projects] = await Promise.all([
     listSources(),

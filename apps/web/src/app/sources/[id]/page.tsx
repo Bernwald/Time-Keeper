@@ -6,6 +6,8 @@ import { listLinksForSource } from "@/lib/db/queries/source-links";
 import { listCompanies } from "@/lib/db/queries/companies";
 import { listContacts } from "@/lib/db/queries/contacts";
 import { listProjects } from "@/lib/db/queries/projects";
+
+export const dynamic = 'force-dynamic';
 import { deleteSource } from "@/app/actions";
 import { SourceLinks } from "./source-links";
 import { BackfillButton } from "./backfill-button";

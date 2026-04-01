@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listContacts } from "@/lib/db/queries/contacts";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 export default async function ContactsPage() {
   const contacts = await listContacts();
 

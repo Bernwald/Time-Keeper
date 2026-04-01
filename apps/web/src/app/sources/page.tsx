@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listSources } from "@/lib/db/queries/sources";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
 const STATUS_LABEL: Record<string, string> = { ready: "Bereit", processing: "Verarbeitung", pending: "Ausstehend", error: "Fehler" };
 const TYPE_STYLE: Record<string, { bg: string; color: string }> = {

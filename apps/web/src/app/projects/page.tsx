@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listProjects } from "@/lib/db/queries/projects";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
+export const dynamic = 'force-dynamic';
+
 export default async function ProjectsPage() {
   const projects = await listProjects();
 

@@ -4,6 +4,8 @@ import { updateOrganization, toggleFeature, resetFeature, inviteMember } from ".
 import { FeatureToggle } from "./feature-toggle";
 import { InviteForm } from "./invite-form";
 
+export const dynamic = 'force-dynamic';
+
 type Props = { params: Promise<{ id: string }> };
 
 export default async function KundeDetailPage({ params }: Props) {
