@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSourceById } from "@/lib/db/queries/sources";
 import { listChunksBySource } from "@/lib/db/queries/chunks";
+import { listLinksForSource } from "@/lib/db/queries/source-links";
+import { listCompanies } from "@/lib/db/queries/companies";
+import { listContacts } from "@/lib/db/queries/contacts";
+import { listProjects } from "@/lib/db/queries/projects";
 import { deleteSource } from "@/app/actions";
+import { SourceLinks } from "./source-links";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
 const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
@@ -10,8 +15,19 @@ const STATUS_LABEL: Record<string, string> = { ready: "Bereit", processing: "Ver
 
 export default async function SourceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [source, chunks] = await Promise.all([getSourceById(id), listChunksBySource(id)]);
+  const [source, chunks, links, companies, contacts, projects] = await Promise.all([
+    getSourceById(id),
+    listChunksBySource(id),
+    listLinksForSource(id),
+    listCompanies(),
+    listContacts(),
+    listProjects(),
+  ]);
   if (!source) notFound();
+
+  const companyOptions = companies.map((c) => ({ id: c.id, name: c.name }));
+  const contactOptions = contacts.map((c) => ({ id: c.id, name: `${c.first_name} ${c.last_name}` }));
+  const projectOptions = projects.map((p) => ({ id: p.id, name: p.name }));
 
   const deleteAction = deleteSource.bind(null, id);
 
@@ -70,6 +86,15 @@ export default async function SourceDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       )}
+
+      {/* Source Links */}
+      <SourceLinks
+        sourceId={id}
+        links={links}
+        companies={companyOptions}
+        contacts={contactOptions}
+        projects={projectOptions}
+      />
 
       {/* Chunks */}
       <div className="flex flex-col gap-3">

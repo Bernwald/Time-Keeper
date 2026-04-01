@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContactById } from "@/lib/db/queries/contacts";
+import { listSourcesForEntity } from "@/lib/db/queries/source-links";
 import { updateContact, deleteContact } from "@/app/actions";
-import { card, btn, input, page, styles } from "@/components/ui/table-classes";
+import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const contact = await getContactById(id);
+  const [contact, linkedSources] = await Promise.all([
+    getContactById(id),
+    listSourcesForEntity("contact", id),
+  ]);
   if (!contact) notFound();
 
   const updateAction = updateContact.bind(null, id);
@@ -67,6 +71,32 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <button type="submit" className={btn.primary} style={styles.accent}>Speichern</button>
         </div>
       </form>
+
+      {/* Linked Sources */}
+      {linkedSources.length > 0 && (
+        <div className="flex flex-col gap-3 animate-fade-in">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+            Verknüpfte Quellen
+          </h2>
+          <div className="flex flex-col gap-2">
+            {linkedSources.map((ls) => (
+              <Link
+                key={ls.id}
+                href={`/sources/${ls.source_id}`}
+                className={`${card.hover} flex items-center gap-3`}
+                style={styles.panel}
+              >
+                <span className={badge.pill} style={styles.accentSoft}>
+                  {ls.source_type}
+                </span>
+                <span className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
+                  {ls.source_title}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form action={deleteAction}>
         <button type="submit" className={btn.danger} style={styles.danger}>Kontakt löschen</button>

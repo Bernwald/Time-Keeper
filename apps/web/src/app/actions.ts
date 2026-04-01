@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createServiceClient, DEFAULT_ORG_ID } from "@/lib/db/supabase";
 import { splitIntoChunks } from "@/lib/content/chunker";
 import { countWords, extractTextFromPdf } from "@/lib/content/extractor";
+import { embedText } from "@/lib/ai/embeddings";
 
 // ─── SOURCES ──────────────────────────────────────────────────────────────
 
@@ -13,7 +14,10 @@ async function storeChunks(sourceId: string, text: string) {
   const chunks = splitIntoChunks(text);
   if (chunks.length === 0) return;
 
-  const rows = chunks.map((c) => ({
+  // Generate embeddings in parallel (graceful: null if no API key)
+  const embeddings = await Promise.all(chunks.map((c) => embedText(c.chunkText)));
+
+  const rows = chunks.map((c, i) => ({
     organization_id: DEFAULT_ORG_ID,
     source_id: sourceId,
     chunk_index: c.chunkIndex,
@@ -21,6 +25,7 @@ async function storeChunks(sourceId: string, text: string) {
     token_count: c.tokenCount,
     char_start: c.charStart,
     char_end: c.charEnd,
+    embedding: embeddings[i] ? JSON.stringify(embeddings[i]) : null,
   }));
 
   await db.from("content_chunks").insert(rows);
@@ -140,6 +145,31 @@ export async function createPdfSource(formData: FormData) {
 
   revalidatePath("/sources");
   redirect(`/sources/${data.id}`);
+}
+
+// ─── SOURCE LINKS ────────────────────────────────────────────────────
+
+export async function addSourceLink(sourceId: string, linkedType: string, linkedId: string) {
+  if (!sourceId || !linkedType || !linkedId) return;
+  const db = createServiceClient();
+  await db.from("source_links").upsert(
+    {
+      organization_id: DEFAULT_ORG_ID,
+      source_id: sourceId,
+      linked_type: linkedType,
+      linked_id: linkedId,
+      link_role: "reference",
+    },
+    { onConflict: "source_id,linked_type,linked_id" },
+  );
+  revalidatePath(`/sources/${sourceId}`);
+}
+
+export async function removeSourceLink(linkId: string, sourceId: string) {
+  if (!linkId) return;
+  const db = createServiceClient();
+  await db.from("source_links").delete().eq("id", linkId);
+  revalidatePath(`/sources/${sourceId}`);
 }
 
 export async function deleteSource(id: string) {

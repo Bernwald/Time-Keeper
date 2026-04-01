@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/db/queries/companies";
+import { listSourcesForEntity } from "@/lib/db/queries/source-links";
 import { updateCompany, deleteCompany } from "@/app/actions";
-import { card, btn, input, page, styles } from "@/components/ui/table-classes";
+import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const company = await getCompanyById(id);
+  const [company, linkedSources] = await Promise.all([
+    getCompanyById(id),
+    listSourcesForEntity("company", id),
+  ]);
   if (!company) notFound();
 
   const updateAction = updateCompany.bind(null, id);
@@ -45,6 +49,32 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           <button type="submit" className={btn.primary} style={styles.accent}>Speichern</button>
         </div>
       </form>
+
+      {/* Linked Sources */}
+      {linkedSources.length > 0 && (
+        <div className="flex flex-col gap-3 animate-fade-in">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+            Verknüpfte Quellen
+          </h2>
+          <div className="flex flex-col gap-2">
+            {linkedSources.map((ls) => (
+              <Link
+                key={ls.id}
+                href={`/sources/${ls.source_id}`}
+                className={`${card.hover} flex items-center gap-3`}
+                style={styles.panel}
+              >
+                <span className={badge.pill} style={styles.accentSoft}>
+                  {ls.source_type}
+                </span>
+                <span className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
+                  {ls.source_title}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form action={deleteAction}>
         <button type="submit" className={btn.danger} style={styles.danger}>Unternehmen löschen</button>

@@ -7,7 +7,8 @@ export type ChatResponse =
 // Graceful: uses LLM if ANTHROPIC_API_KEY is set, otherwise returns relevant chunks
 export async function generateAnswer(
   question: string,
-  chunks: ChunkSearchResult[]
+  chunks: ChunkSearchResult[],
+  entityContext?: string,
 ): Promise<ChatResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -23,13 +24,17 @@ export async function generateAnswer(
       .map((c, i) => `[Quelle ${i + 1}: ${c.source_title}]\n${c.chunk_text}`)
       .join("\n\n---\n\n");
 
+    const entityHint = entityContext
+      ? `\n\nDie Frage bezieht sich auf: ${entityContext}. Bevorzuge Informationen die mit diesen Entitäten verknüpft sind.`
+      : "";
+
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
       messages: [
         {
           role: "user",
-          content: `Du bist ein hilfreicher Assistent der Fragen auf Basis der folgenden Quellen beantwortet.\n\nQuellen:\n${context}\n\nFrage: ${question}\n\nAntworte präzise und nenne die Quellen.`,
+          content: `Du bist ein hilfreicher Assistent der Fragen auf Basis der folgenden Quellen beantwortet.${entityHint}\n\nQuellen:\n${context}\n\nFrage: ${question}\n\nAntworte präzise und nenne die Quellen.`,
         },
       ],
     });

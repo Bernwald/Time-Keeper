@@ -1,4 +1,4 @@
-import { fullTextSearch } from "@/lib/db/queries/search";
+import { hybridSearch } from "@/lib/db/queries/search";
 import { SearchForm } from "./search-form";
 import { card, badge, page, styles } from "@/components/ui/table-classes";
 
@@ -9,7 +9,7 @@ export default async function SearchPage({
 }) {
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
-  const results = query ? await fullTextSearch(query, 20) : [];
+  const results = query ? await hybridSearch(query, 20) : [];
 
   return (
     <div className={page.narrow}>
@@ -18,7 +18,7 @@ export default async function SearchPage({
           Suche
         </h1>
         <p className="text-sm mt-0.5" style={styles.muted}>
-          Durchsuche alle Wissensquellen per Volltext.
+          Durchsuche alle Wissensquellen per Volltext und Semantik.
         </p>
       </div>
 
