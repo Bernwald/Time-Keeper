@@ -7,6 +7,7 @@ import { requireOrgId } from "@/lib/db/org-context";
 import { splitIntoChunks } from "@/lib/content/chunker";
 import { countWords, extractTextFromPdf } from "@/lib/content/extractor";
 import { embedText } from "@/lib/ai/embeddings";
+import { transcribeAudio } from "@/lib/ai/transcribe";
 
 // ─── SOURCES ──────────────────────────────────────────────────────────────
 
@@ -143,6 +144,68 @@ export async function createPdfSource(formData: FormData) {
       .update({ raw_text: text, word_count: countWords(text) })
       .eq("id", data.id);
     await storeChunks(data.id, text, orgId);
+  }
+
+  await db.from("sources").update({ status: "ready" }).eq("id", data.id);
+
+  revalidatePath("/sources");
+  redirect(`/sources/${data.id}`);
+}
+
+// ─── RECORDING (VOICE) ──────────────────────────────────────────────
+
+export async function createRecordingSource(formData: FormData) {
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const audioFile = formData.get("audio") as File | null;
+  const linkType = formData.get("linkType") as string;
+  const linkId = formData.get("linkId") as string;
+
+  if (!title?.trim() || !audioFile) return;
+
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  // Create source in processing state
+  const { data, error } = await db
+    .from("sources")
+    .insert({
+      organization_id: orgId,
+      title: title.trim(),
+      description: description?.trim() || null,
+      source_type: "recording",
+      original_filename: audioFile.name,
+      mime_type: audioFile.type,
+      status: "processing",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return;
+
+  // Transcribe via Whisper
+  const transcript = await transcribeAudio(audioFile);
+
+  if (transcript.trim()) {
+    await db
+      .from("sources")
+      .update({ raw_text: transcript, word_count: countWords(transcript) })
+      .eq("id", data.id);
+    await storeChunks(data.id, transcript, orgId);
+  }
+
+  // Optional entity link
+  if (linkType && linkId) {
+    await db.from("source_links").upsert(
+      {
+        organization_id: orgId,
+        source_id: data.id,
+        linked_type: linkType,
+        linked_id: linkId,
+        link_role: "reference",
+      },
+      { onConflict: "source_id,linked_type,linked_id" },
+    );
   }
 
   await db.from("sources").update({ status: "ready" }).eq("id", data.id);

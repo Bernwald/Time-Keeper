@@ -4,12 +4,13 @@ import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
 export const dynamic = 'force-dynamic';
 
-const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
+const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF", recording: "Aufnahme" };
 const STATUS_LABEL: Record<string, string> = { ready: "Bereit", processing: "Verarbeitung", pending: "Ausstehend", error: "Fehler" };
 const TYPE_STYLE: Record<string, { bg: string; color: string }> = {
   text: { bg: "var(--color-accent-soft)", color: "var(--color-accent)" },
   transcript: { bg: "var(--color-info-soft)", color: "var(--color-info)" },
   pdf: { bg: "var(--color-warning-soft)", color: "var(--color-warning)" },
+  recording: { bg: "var(--color-danger-soft)", color: "var(--color-danger)" },
 };
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   ready: { bg: "var(--color-success-soft)", color: "var(--color-success)" },
