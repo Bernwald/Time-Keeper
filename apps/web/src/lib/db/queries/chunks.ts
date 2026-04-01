@@ -1,4 +1,4 @@
-import { createServiceClient, DEFAULT_ORG_ID } from "../supabase";
+import { createUserClient } from "../supabase-server";
 
 export type Chunk = {
   id: string;
@@ -12,7 +12,7 @@ export type Chunk = {
 };
 
 export async function listChunksBySource(sourceId: string): Promise<Chunk[]> {
-  const db = createServiceClient();
+  const db = await createUserClient();
   const { data, error } = await db
     .from("content_chunks")
     .select("id, source_id, chunk_index, chunk_text, token_count, char_start, char_end, created_at")
@@ -24,7 +24,7 @@ export async function listChunksBySource(sourceId: string): Promise<Chunk[]> {
 }
 
 export async function countChunksWithoutEmbeddings(sourceId: string): Promise<number> {
-  const db = createServiceClient();
+  const db = await createUserClient();
   const { count, error } = await db
     .from("content_chunks")
     .select("id", { count: "exact", head: true })

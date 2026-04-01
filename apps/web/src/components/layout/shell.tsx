@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { Nav, MobileNav } from "./nav";
+import type { OrgBranding } from "@/lib/db/queries/organization";
 
-export function Shell({ children }: { children: React.ReactNode }) {
+type ShellProps = {
+  children: React.ReactNode;
+  branding?: OrgBranding;
+  isAdmin?: boolean;
+};
+
+export function Shell({ children, branding, isAdmin }: ShellProps) {
+  const displayName = branding?.displayName ?? "Time Keeper";
+  const shortName = branding?.shortName ?? "TK";
+
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row">
       {/* ── Desktop sidebar ── */}
@@ -19,14 +29,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
               className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 gradient-accent"
               style={{ color: "#fff", boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)" }}
             >
-              TK
+              {shortName}
             </div>
             <div className="flex flex-col">
               <span
                 className="text-[15px] font-semibold leading-tight"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
               >
-                Time Keeper
+                {displayName}
               </span>
               <span className="text-[11px] leading-tight" style={{ color: "var(--color-placeholder)" }}>
                 Knowledge Platform
@@ -36,7 +46,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex-1 px-3 py-3 overflow-y-auto">
-          <Nav />
+          <Nav isAdmin={isAdmin} />
         </div>
 
         <div className="p-4 border-t" style={{ borderColor: "var(--color-line)" }}>
@@ -63,13 +73,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold gradient-accent"
             style={{ color: "#fff" }}
           >
-            TK
+            {shortName}
           </div>
           <span
             className="text-sm font-semibold"
             style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
           >
-            Time Keeper
+            {displayName}
           </span>
         </Link>
       </header>

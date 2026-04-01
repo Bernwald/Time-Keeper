@@ -1,4 +1,5 @@
-import { createServiceClient, DEFAULT_ORG_ID } from "../supabase";
+import { createUserClient } from "../supabase-server";
+import { requireOrgId } from "../org-context";
 
 export type Contact = {
   id: string;
@@ -15,23 +16,25 @@ export type Contact = {
 };
 
 export async function listContacts(): Promise<Contact[]> {
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db
     .from("contacts")
     .select("id, company_id, first_name, last_name, email, phone, role_title, status, notes, created_at, updated_at")
-    .eq("organization_id", DEFAULT_ORG_ID)
+    .eq("organization_id", orgId)
     .order("last_name");
   if (error) throw error;
   return data ?? [];
 }
 
 export async function getContactById(id: string): Promise<Contact | null> {
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db
     .from("contacts")
     .select("*")
     .eq("id", id)
-    .eq("organization_id", DEFAULT_ORG_ID)
+    .eq("organization_id", orgId)
     .single();
   if (error) return null;
   return data;

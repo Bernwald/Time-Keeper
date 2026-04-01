@@ -1,4 +1,4 @@
-import { createServiceClient, DEFAULT_ORG_ID } from "../supabase";
+import { createUserClient } from "../supabase-server";
 
 export type SourceLink = {
   id: string;
@@ -21,7 +21,7 @@ export type LinkedSource = {
 };
 
 export async function listLinksForSource(sourceId: string): Promise<SourceLink[]> {
-  const db = createServiceClient();
+  const db = await createUserClient();
   const { data, error } = await db.rpc("get_source_links_resolved", {
     p_source_id: sourceId,
   });
@@ -33,7 +33,7 @@ export async function listSourcesForEntity(
   linkedType: string,
   linkedId: string,
 ): Promise<LinkedSource[]> {
-  const db = createServiceClient();
+  const db = await createUserClient();
   const { data, error } = await db.rpc("get_sources_for_entity", {
     p_linked_type: linkedType,
     p_linked_id: linkedId,

@@ -1,7 +1,8 @@
 import { listCompanies } from "@/lib/db/queries/companies";
 import { listContacts } from "@/lib/db/queries/contacts";
 import { listProjects } from "@/lib/db/queries/projects";
-import { createServiceClient, DEFAULT_ORG_ID } from "@/lib/db/supabase";
+import { createUserClient } from "@/lib/db/supabase-server";
+import { requireOrgId } from "@/lib/db/org-context";
 
 export type ResolvedEntity = {
   type: "company" | "contact" | "project";
@@ -47,14 +48,15 @@ export async function resolveEntities(query: string): Promise<ResolvedEntity[]> 
 export async function getBoostSourceIds(entities: ResolvedEntity[]): Promise<string[]> {
   if (entities.length === 0) return [];
 
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const sourceIds = new Set<string>();
 
   for (const entity of entities) {
     const { data } = await db
       .from("source_links")
       .select("source_id")
-      .eq("organization_id", DEFAULT_ORG_ID)
+      .eq("organization_id", orgId)
       .eq("linked_type", entity.type)
       .eq("linked_id", entity.id);
 

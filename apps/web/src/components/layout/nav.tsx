@@ -78,6 +78,25 @@ function IconProjects({ size = 20 }: { size?: number }) {
   );
 }
 
+function IconAdmin({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconLogout({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────
 
 type NavItem = {
@@ -122,7 +141,7 @@ const mobileItems: NavItem[] = [
 
 // ─── Desktop sidebar nav ──────────────────────────────────────────────
 
-export function Nav() {
+export function Nav({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -149,6 +168,44 @@ export function Nav() {
           </ul>
         </div>
       ))}
+
+      {isAdmin && (
+        <div>
+          <p
+            className="text-[11px] font-semibold uppercase tracking-widest mb-1.5 px-3"
+            style={{ color: "var(--color-placeholder)" }}
+          >
+            Admin
+          </p>
+          <ul className="flex flex-col gap-0.5">
+            <li>
+              <NavLink item={{ href: "/admin", label: "Verwaltung", icon: IconAdmin }} pathname={pathname} />
+            </li>
+          </ul>
+        </div>
+      )}
+
+      {/* Logout */}
+      <div className="mt-auto pt-2">
+        <form action="/auth/abmelden" method="POST">
+          <button
+            type="submit"
+            className="flex items-center gap-2.5 min-h-[40px] px-3 rounded-xl text-[13px] font-medium w-full transition-all"
+            style={{ color: "var(--color-muted)" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--color-bg-elevated)";
+              e.currentTarget.style.color = "var(--color-text)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--color-muted)";
+            }}
+          >
+            <IconLogout size={18} />
+            Abmelden
+          </button>
+        </form>
+      </div>
     </nav>
   );
 }

@@ -2,14 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createServiceClient, DEFAULT_ORG_ID } from "@/lib/db/supabase";
+import { createServiceClient } from "@/lib/db/supabase-server";
+import { requireOrgId } from "@/lib/db/org-context";
 import { splitIntoChunks } from "@/lib/content/chunker";
 import { countWords, extractTextFromPdf } from "@/lib/content/extractor";
 import { embedText } from "@/lib/ai/embeddings";
 
 // ─── SOURCES ──────────────────────────────────────────────────────────────
 
-async function storeChunks(sourceId: string, text: string) {
+async function storeChunks(sourceId: string, text: string, orgId: string) {
   const db = createServiceClient();
   const chunks = splitIntoChunks(text);
   if (chunks.length === 0) return;
@@ -18,7 +19,7 @@ async function storeChunks(sourceId: string, text: string) {
   const embeddings = await Promise.all(chunks.map((c) => embedText(c.chunkText)));
 
   const rows = chunks.map((c, i) => ({
-    organization_id: DEFAULT_ORG_ID,
+    organization_id: orgId,
     source_id: sourceId,
     chunk_index: c.chunkIndex,
     chunk_text: c.chunkText,
@@ -38,11 +39,12 @@ export async function createTextSource(formData: FormData) {
 
   if (!title?.trim() || !rawText?.trim()) return;
 
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const { data, error } = await db
     .from("sources")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       title: title.trim(),
       description: description?.trim() || null,
       source_type: "text",
@@ -55,7 +57,7 @@ export async function createTextSource(formData: FormData) {
 
   if (error || !data) return;
 
-  await storeChunks(data.id, rawText);
+  await storeChunks(data.id, rawText, orgId);
   await db.from("sources").update({ status: "ready" }).eq("id", data.id);
 
   revalidatePath("/sources");
@@ -69,11 +71,12 @@ export async function createTranscriptSource(formData: FormData) {
 
   if (!title?.trim() || !rawText?.trim()) return;
 
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const { data, error } = await db
     .from("sources")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       title: title.trim(),
       description: description?.trim() || null,
       source_type: "transcript",
@@ -86,7 +89,7 @@ export async function createTranscriptSource(formData: FormData) {
 
   if (error || !data) return;
 
-  await storeChunks(data.id, rawText);
+  await storeChunks(data.id, rawText, orgId);
   await db.from("sources").update({ status: "ready" }).eq("id", data.id);
 
   revalidatePath("/sources");
@@ -100,11 +103,12 @@ export async function createPdfSource(formData: FormData) {
 
   if (!title?.trim() || !file) return;
 
+  const orgId = await requireOrgId();
   const db = createServiceClient();
 
   // Upload to Supabase Storage
   const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const storagePath = `${DEFAULT_ORG_ID}/${filename}`;
+  const storagePath = `${orgId}/${filename}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadError } = await db.storage
@@ -117,7 +121,7 @@ export async function createPdfSource(formData: FormData) {
   const { data, error } = await db
     .from("sources")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       title: title.trim(),
       description: description?.trim() || null,
       source_type: "pdf",
@@ -138,7 +142,7 @@ export async function createPdfSource(formData: FormData) {
       .from("sources")
       .update({ raw_text: text, word_count: countWords(text) })
       .eq("id", data.id);
-    await storeChunks(data.id, text);
+    await storeChunks(data.id, text, orgId);
   }
 
   await db.from("sources").update({ status: "ready" }).eq("id", data.id);
@@ -195,6 +199,7 @@ export type BatchImportResult = {
 };
 
 export async function batchImportSources(rows: ImportRow[]): Promise<BatchImportResult> {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const result: BatchImportResult = { total: rows.length, imported: 0, errors: [] };
 
@@ -211,7 +216,7 @@ export async function batchImportSources(rows: ImportRow[]): Promise<BatchImport
       const { data, error } = await db
         .from("sources")
         .insert({
-          organization_id: DEFAULT_ORG_ID,
+          organization_id: orgId,
           title: row.title.trim(),
           source_type: row.sourceType || "text",
           raw_text: row.content.trim(),
@@ -227,7 +232,7 @@ export async function batchImportSources(rows: ImportRow[]): Promise<BatchImport
       }
 
       // Chunk + embed
-      await storeChunks(data.id, row.content);
+      await storeChunks(data.id, row.content, orgId);
 
       // Mark ready
       await db.from("sources").update({ status: "ready" }).eq("id", data.id);
@@ -236,7 +241,7 @@ export async function batchImportSources(rows: ImportRow[]): Promise<BatchImport
       if (row.linkType && row.linkId) {
         await db.from("source_links").upsert(
           {
-            organization_id: DEFAULT_ORG_ID,
+            organization_id: orgId,
             source_id: data.id,
             linked_type: row.linkType,
             linked_id: row.linkId,
@@ -260,10 +265,11 @@ export async function batchImportSources(rows: ImportRow[]): Promise<BatchImport
 
 export async function addSourceLink(sourceId: string, linkedType: string, linkedId: string) {
   if (!sourceId || !linkedType || !linkedId) return;
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   await db.from("source_links").upsert(
     {
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       source_id: sourceId,
       linked_type: linkedType,
       linked_id: linkedId,
@@ -282,10 +288,11 @@ export async function removeSourceLink(linkId: string, sourceId: string) {
 }
 
 export async function deleteSource(id: string) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   await db.from("content_chunks").delete().eq("source_id", id);
   await db.from("source_links").delete().eq("source_id", id);
-  await db.from("sources").delete().eq("id", id).eq("organization_id", DEFAULT_ORG_ID);
+  await db.from("sources").delete().eq("id", id).eq("organization_id", orgId);
   revalidatePath("/sources");
   redirect("/sources");
 }
@@ -293,11 +300,12 @@ export async function deleteSource(id: string) {
 // ─── COMPANIES ────────────────────────────────────────────────────────────
 
 export async function createCompany(formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const { data, error } = await db
     .from("companies")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       name: (formData.get("name") as string).trim(),
       website: (formData.get("website") as string)?.trim() || null,
       status: (formData.get("status") as string) || "active",
@@ -311,6 +319,7 @@ export async function createCompany(formData: FormData) {
 }
 
 export async function updateCompany(id: string, formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   await db
     .from("companies")
@@ -321,15 +330,16 @@ export async function updateCompany(id: string, formData: FormData) {
       notes: (formData.get("notes") as string)?.trim() || null,
     })
     .eq("id", id)
-    .eq("organization_id", DEFAULT_ORG_ID);
+    .eq("organization_id", orgId);
   revalidatePath(`/companies/${id}`);
   revalidatePath("/companies");
   redirect(`/companies/${id}`);
 }
 
 export async function deleteCompany(id: string) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
-  await db.from("companies").delete().eq("id", id).eq("organization_id", DEFAULT_ORG_ID);
+  await db.from("companies").delete().eq("id", id).eq("organization_id", orgId);
   revalidatePath("/companies");
   redirect("/companies");
 }
@@ -337,11 +347,12 @@ export async function deleteCompany(id: string) {
 // ─── CONTACTS ─────────────────────────────────────────────────────────────
 
 export async function createContact(formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const { data, error } = await db
     .from("contacts")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       company_id: (formData.get("company_id") as string) || null,
       first_name: (formData.get("first_name") as string).trim(),
       last_name: (formData.get("last_name") as string).trim(),
@@ -359,6 +370,7 @@ export async function createContact(formData: FormData) {
 }
 
 export async function updateContact(id: string, formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   await db
     .from("contacts")
@@ -373,15 +385,16 @@ export async function updateContact(id: string, formData: FormData) {
       notes: (formData.get("notes") as string)?.trim() || null,
     })
     .eq("id", id)
-    .eq("organization_id", DEFAULT_ORG_ID);
+    .eq("organization_id", orgId);
   revalidatePath(`/contacts/${id}`);
   revalidatePath("/contacts");
   redirect(`/contacts/${id}`);
 }
 
 export async function deleteContact(id: string) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
-  await db.from("contacts").delete().eq("id", id).eq("organization_id", DEFAULT_ORG_ID);
+  await db.from("contacts").delete().eq("id", id).eq("organization_id", orgId);
   revalidatePath("/contacts");
   redirect("/contacts");
 }
@@ -389,11 +402,12 @@ export async function deleteContact(id: string) {
 // ─── PROJECTS ─────────────────────────────────────────────────────────────
 
 export async function createProject(formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   const { data, error } = await db
     .from("projects")
     .insert({
-      organization_id: DEFAULT_ORG_ID,
+      organization_id: orgId,
       company_id: (formData.get("company_id") as string) || null,
       name: (formData.get("name") as string).trim(),
       status: (formData.get("status") as string) || "active",
@@ -407,6 +421,7 @@ export async function createProject(formData: FormData) {
 }
 
 export async function updateProject(id: string, formData: FormData) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
   await db
     .from("projects")
@@ -417,15 +432,16 @@ export async function updateProject(id: string, formData: FormData) {
       description: (formData.get("description") as string)?.trim() || null,
     })
     .eq("id", id)
-    .eq("organization_id", DEFAULT_ORG_ID);
+    .eq("organization_id", orgId);
   revalidatePath(`/projects/${id}`);
   revalidatePath("/projects");
   redirect(`/projects/${id}`);
 }
 
 export async function deleteProject(id: string) {
+  const orgId = await requireOrgId();
   const db = createServiceClient();
-  await db.from("projects").delete().eq("id", id).eq("organization_id", DEFAULT_ORG_ID);
+  await db.from("projects").delete().eq("id", id).eq("organization_id", orgId);
   revalidatePath("/projects");
   redirect("/projects");
 }

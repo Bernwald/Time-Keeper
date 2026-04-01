@@ -11,7 +11,11 @@
 
 ## Schema-Struktur
 
-Noch keine Tabellen. Unbeschriebenes Blatt.
+Tenant: organizations → organization_members → profiles
+Knowledge: sources → content_chunks (+ pgvector embeddings), source_links
+Operative: companies, contacts, projects
+Features: feature_flags → organization_features
+Admin: profiles.is_platform_admin, is_platform_admin() function
 
 ## RLS-Pattern (Standard)
 

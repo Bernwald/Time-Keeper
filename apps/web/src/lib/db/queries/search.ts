@@ -1,4 +1,5 @@
-import { createServiceClient, DEFAULT_ORG_ID } from "../supabase";
+import { createUserClient } from "../supabase-server";
+import { requireOrgId } from "../org-context";
 import { embedText } from "@/lib/ai/embeddings";
 
 export type ChunkSearchResult = {
@@ -13,9 +14,10 @@ export type ChunkSearchResult = {
 
 export async function fullTextSearch(query: string, limit = 10): Promise<ChunkSearchResult[]> {
   if (!query.trim()) return [];
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db.rpc("search_chunks", {
-    p_org_id: DEFAULT_ORG_ID,
+    p_org_id: orgId,
     p_query: query,
     p_limit: limit,
   });
@@ -31,9 +33,10 @@ export async function hybridSearch(query: string, limit = 10): Promise<ChunkSear
   // Fall back to FTS if no embedding key available
   if (!embedding) return fullTextSearch(query, limit);
 
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db.rpc("hybrid_search_chunks", {
-    p_org_id: DEFAULT_ORG_ID,
+    p_org_id: orgId,
     p_query: query,
     p_embedding: JSON.stringify(embedding),
     p_limit: limit,
@@ -54,9 +57,10 @@ export async function boostedHybridSearch(
   // Fall back to FTS if no embedding key available
   if (!embedding) return fullTextSearch(query, limit);
 
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db.rpc("hybrid_search_boosted", {
-    p_org_id: DEFAULT_ORG_ID,
+    p_org_id: orgId,
     p_query: query,
     p_embedding: JSON.stringify(embedding),
     p_boost_source_ids: boostSourceIds,
@@ -74,12 +78,13 @@ export async function chunksBySourceIds(
 ): Promise<ChunkSearchResult[]> {
   if (sourceIds.length === 0) return [];
 
-  const db = createServiceClient();
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
   const { data, error } = await db
     .from("content_chunks")
     .select("id, source_id, chunk_index, chunk_text, sources!inner(title, source_type)")
     .in("source_id", sourceIds)
-    .eq("organization_id", DEFAULT_ORG_ID)
+    .eq("organization_id", orgId)
     .order("source_id")
     .order("chunk_index")
     .limit(limit);
