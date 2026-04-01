@@ -132,15 +132,21 @@ export default function ImportPage() {
   function buildRows(): ImportRow[] {
     if (!parsed) return [];
     return parsed.rows.map((row) => {
-      const content = mapping.contentColumns
-        .map((col) => row[col] ?? "")
-        .filter(Boolean)
-        .join("\n\n");
+      const content = mapping.contentColumns.length === 1
+        ? (row[mapping.contentColumns[0]] ?? "")
+        : mapping.contentColumns
+            .map((col) => {
+              const val = (row[col] ?? "").trim();
+              return val ? `### ${col}\n${val}` : "";
+            })
+            .filter(Boolean)
+            .join("\n\n");
 
       return {
         title: row[mapping.titleColumn] ?? "Ohne Titel",
         content,
         sourceType: mapping.sourceType,
+        columnNames: mapping.contentColumns.length > 1 ? mapping.contentColumns : undefined,
         linkType: mapping.linkType || undefined,
         linkId: mapping.linkId || undefined,
       };
@@ -372,10 +378,15 @@ export default function ImportPage() {
 
             {previewRows.map((row, i) => {
               const title = row[mapping.titleColumn] ?? "—";
-              const content = mapping.contentColumns
-                .map((col) => row[col] ?? "")
-                .filter(Boolean)
-                .join("\n\n");
+              const content = mapping.contentColumns.length === 1
+                ? (row[mapping.contentColumns[0]] ?? "")
+                : mapping.contentColumns
+                    .map((col) => {
+                      const val = (row[col] ?? "").trim();
+                      return val ? `### ${col}\n${val}` : "";
+                    })
+                    .filter(Boolean)
+                    .join("\n\n");
 
               return (
                 <div key={i} className={card.flat} style={{ ...styles.panel, borderColor: "var(--color-line-soft)" }}>

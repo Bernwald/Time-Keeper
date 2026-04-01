@@ -188,6 +188,7 @@ export type ImportRow = {
   title: string;
   content: string;
   sourceType?: string;
+  columnNames?: string[]; // original column names when multiple selected
   linkType?: string;   // 'company' | 'contact' | 'project'
   linkId?: string;     // UUID of the entity to link
 };
@@ -222,6 +223,7 @@ export async function batchImportSources(rows: ImportRow[]): Promise<BatchImport
           raw_text: row.content.trim(),
           word_count: wordCount,
           status: "processing",
+          metadata: row.columnNames ? { columns: row.columnNames } : {},
         })
         .select("id")
         .single();
