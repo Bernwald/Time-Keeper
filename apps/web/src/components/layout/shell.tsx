@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Nav, MobileNav } from "./nav";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import type { OrgBranding } from "@/lib/db/queries/organization";
 
 type ShellProps = {
@@ -21,14 +22,14 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
         style={{
           width: "var(--sidebar-w)",
           borderRight: "1px solid var(--color-line)",
-          background: "#fff",
+          background: "var(--color-panel)",
         }}
       >
         <div className="p-5 pb-3">
           <Link href="/" className="flex items-center gap-3 group">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 gradient-accent"
-              style={{ color: "#fff", boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)" }}
+              style={{ color: "var(--color-accent-text)", boxShadow: "0 2px 8px rgba(13, 148, 136, 0.3)" }}
             >
               {shortName}
             </div>
@@ -51,11 +52,14 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
         </div>
 
         <div className="p-4 border-t" style={{ borderColor: "var(--color-line)" }}>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-success)" }} />
-            <p className="text-[11px]" style={{ color: "var(--color-placeholder)" }}>
-              v0.1 · System bereit
-            </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-success)" }} />
+              <p className="text-[11px]" style={{ color: "var(--color-placeholder)" }}>
+                v0.1 · System bereit
+              </p>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </aside>
@@ -66,13 +70,13 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
         style={{
           height: "var(--header-h)",
           borderBottom: "1px solid var(--color-line)",
-          background: "rgba(255, 255, 255, 0.8)",
+          background: "color-mix(in srgb, var(--color-panel) 80%, transparent)",
         }}
       >
         <Link href="/" className="flex items-center gap-2.5">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold gradient-accent"
-            style={{ color: "#fff" }}
+            style={{ color: "var(--color-accent-text)" }}
           >
             {shortName}
           </div>
@@ -83,6 +87,7 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
             {displayName}
           </span>
         </Link>
+        <ThemeToggle />
       </header>
 
       {/* ── Main ── */}
