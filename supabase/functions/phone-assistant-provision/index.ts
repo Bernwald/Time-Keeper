@@ -68,10 +68,13 @@ Deno.serve(async (req: Request) => {
     return errorResponse("Method not allowed", 405);
   }
 
-  // Authenticate via service role key or API key
-  const authHeader = req.headers.get("authorization");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!authHeader?.includes(serviceKey ?? "___never_match___")) {
+  // Authenticate via service role key
+  const authHeader = req.headers.get("authorization") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  // Accept both "Bearer <key>" and raw key
+  const token = authHeader.replace(/^Bearer\s+/i, "");
+  if (!serviceKey || token !== serviceKey) {
+    console.error("Auth failed: token does not match service role key");
     return errorResponse("Unauthorized", 401);
   }
 

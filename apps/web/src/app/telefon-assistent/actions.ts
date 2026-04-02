@@ -89,14 +89,13 @@ export async function toggleAssistantStatus() {
 
 // ─── VAPI PROVISIONING ─────────────────────────────────────────────────────
 
-export async function provisionVapiAssistant() {
-  const orgId = await requireOrgId();
-
+async function callProvisionFunction(action: string, orgId: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
-    throw new Error("Missing Supabase config");
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    return;
   }
 
   const response = await fetch(
@@ -107,50 +106,29 @@ export async function provisionVapiAssistant() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${serviceKey}`,
       },
-      body: JSON.stringify({ action: "create_assistant", org_id: orgId }),
+      body: JSON.stringify({ action, org_id: orgId }),
     },
   );
 
   const data = await response.json();
 
   if (!response.ok) {
-    console.error("Provision error:", data);
-    throw new Error(data?.error ?? "Vapi-Provisionierung fehlgeschlagen");
+    console.error(`Provision ${action} error:`, data);
   }
 
+  return data;
+}
+
+export async function provisionVapiAssistant() {
+  const orgId = await requireOrgId();
+  await callProvisionFunction("create_assistant", orgId);
   revalidatePath("/telefon-assistent");
   revalidatePath("/telefon-assistent/einstellungen");
 }
 
 export async function syncVapiConfig() {
   const orgId = await requireOrgId();
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
-    throw new Error("Missing Supabase config");
-  }
-
-  const response = await fetch(
-    `${supabaseUrl}/functions/v1/phone-assistant-provision`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ action: "sync_config", org_id: orgId }),
-    },
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error("Sync error:", data);
-    throw new Error(data?.error ?? "Sync fehlgeschlagen");
-  }
-
+  await callProvisionFunction("sync_config", orgId);
   revalidatePath("/telefon-assistent");
   revalidatePath("/telefon-assistent/einstellungen");
 }
