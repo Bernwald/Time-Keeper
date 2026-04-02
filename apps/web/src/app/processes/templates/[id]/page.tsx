@@ -172,7 +172,7 @@ function MetricCard({
     <div
       className="rounded-xl p-3 md:p-4"
       style={{
-        background: "#fff",
+        background: "var(--color-panel)",
         border: "1px solid var(--color-line)",
       }}
     >

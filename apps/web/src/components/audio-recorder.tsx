@@ -197,7 +197,7 @@ export default function AudioRecorder({ onRecordingComplete, disabled }: AudioRe
               type="button"
               onClick={stopRecording}
               className={btn.danger}
-              style={{ background: "var(--color-danger)", color: "#fff" }}
+              style={{ background: "var(--color-danger)", color: "var(--color-accent-text)" }}
             >
               Stoppen
             </button>

@@ -79,7 +79,7 @@ export default async function AdminTagsPage() {
                   <button
                     key={c}
                     type="button"
-                    className="w-6 h-6 rounded-full border-2 border-transparent hover:border-gray-300 transition-all"
+                    className="w-6 h-6 rounded-full border-2 border-transparent hover:border-[var(--color-line)] transition-all"
                     style={{ background: c }}
                     onClick={undefined}
                     aria-label={`Farbe ${c}`}

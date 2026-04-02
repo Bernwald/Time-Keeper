@@ -26,7 +26,7 @@ export function ProcessList({ instances }: { instances: ProcessInstance[] }) {
               href={`/processes/${inst.id}`}
               className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl min-h-[44px] transition-all hover:shadow-sm"
               style={{
-                background: "#fff",
+                background: "var(--color-panel)",
                 border: "1px solid var(--color-line)",
               }}
             >

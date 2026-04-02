@@ -21,7 +21,7 @@ export default async function HomePage() {
       {/* ── Hero gradient banner ── */}
       <div
         className="gradient-accent px-4 md:px-8 py-8 md:py-12"
-        style={{ color: "#fff" }}
+        style={{ color: "var(--color-accent-text)" }}
       >
         <div className="max-w-3xl animate-fade-in">
           <h1
@@ -38,7 +38,7 @@ export default async function HomePage() {
               href="/sources/new"
               className={btn.primary}
               style={{
-                background: "#fff",
+                background: "var(--color-panel)",
                 color: "var(--color-accent)",
                 fontWeight: 600,
               }}
@@ -50,7 +50,7 @@ export default async function HomePage() {
               className={btn.secondary}
               style={{
                 background: "rgba(255,255,255,0.15)",
-                color: "#fff",
+                color: "var(--color-accent-text)",
                 border: "1px solid rgba(255,255,255,0.3)",
               }}
             >
@@ -76,7 +76,7 @@ export default async function HomePage() {
             href="/search"
             className={btn.secondary}
             style={{
-              background: "#fff",
+              background: "var(--color-panel)",
               color: "var(--color-text)",
               border: "1px solid var(--color-line)",
               boxShadow: "var(--shadow-xs)",
@@ -91,7 +91,7 @@ export default async function HomePage() {
             href="/companies/new"
             className={btn.secondary}
             style={{
-              background: "#fff",
+              background: "var(--color-panel)",
               color: "var(--color-text)",
               border: "1px solid var(--color-line)",
               boxShadow: "var(--shadow-xs)",
@@ -103,7 +103,7 @@ export default async function HomePage() {
             href="/contacts/new"
             className={btn.secondary}
             style={{
-              background: "#fff",
+              background: "var(--color-panel)",
               color: "var(--color-text)",
               border: "1px solid var(--color-line)",
               boxShadow: "var(--shadow-xs)",
@@ -131,7 +131,7 @@ export default async function HomePage() {
                   href={`/sources/${s.id}`}
                   className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl min-h-[44px] transition-all hover:shadow-sm"
                   style={{
-                    background: "#fff",
+                    background: "var(--color-panel)",
                     border: "1px solid var(--color-line)",
                   }}
                 >
@@ -168,7 +168,7 @@ function StatCard({ value, label, href, color }: { value: number; label: string;
       href={href}
       className="rounded-xl p-4 md:p-5 transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
       style={{
-        background: "#fff",
+        background: "var(--color-panel)",
         border: "1px solid var(--color-line)",
         boxShadow: "var(--shadow-sm)",
       }}

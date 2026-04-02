@@ -307,7 +307,7 @@ export function MobileNav() {
         height: `calc(var(--bottom-nav-h) + env(safe-area-inset-bottom))`,
         paddingBottom: "env(safe-area-inset-bottom)",
         borderTop: "1px solid var(--color-line-soft)",
-        background: "rgba(255, 253, 248, 0.88)",
+        background: "color-mix(in srgb, var(--color-panel) 88%, transparent)",
       }}
     >
       {mobileItems.map((item) => {

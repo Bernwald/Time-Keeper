@@ -38,7 +38,7 @@ export default function LoginPage() {
       <div className="text-center mb-6">
         <div
           className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center text-base font-bold gradient-accent"
-          style={{ color: "#fff" }}
+          style={{ color: "var(--color-accent-text)" }}
         >
           TK
         </div>

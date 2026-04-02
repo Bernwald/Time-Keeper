@@ -35,7 +35,7 @@ export default async function ProcessesPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/processes/templates/new" className={btn.secondary} style={{
-            background: "#fff",
+            background: "var(--color-panel)",
             color: "var(--color-text)",
             border: "1px solid var(--color-line)",
           }}>
@@ -175,7 +175,7 @@ function KpiCard({
     <div
       className="rounded-xl p-4 md:p-5"
       style={{
-        background: "#fff",
+        background: "var(--color-panel)",
         border: "1px solid var(--color-line)",
         boxShadow: "var(--shadow-sm)",
       }}
