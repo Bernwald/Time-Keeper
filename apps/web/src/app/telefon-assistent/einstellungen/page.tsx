@@ -3,6 +3,7 @@ import { getAssistant } from "@/lib/db/queries/phone-assistant";
 import { VOICE_OPTIONS, LANGUAGE_MODES } from "@/lib/constants/phone-assistant";
 import { createOrUpdateAssistant, toggleAssistantStatus } from "../actions";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 export default async function AssistantSettingsPage() {
   const assistant = await getAssistant();
@@ -288,9 +289,7 @@ export default async function AssistantSettingsPage() {
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          <button type="submit" className={btn.primary} style={styles.accent}>
-            Speichern
-          </button>
+          <SubmitButton label="Speichern" pendingLabel="Wird gespeichert..." />
         </div>
       </form>
     </div>

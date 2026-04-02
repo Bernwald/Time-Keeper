@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
 
@@ -61,6 +62,7 @@ export async function createOrUpdateAssistant(formData: FormData) {
 
   revalidatePath("/telefon-assistent");
   revalidatePath("/telefon-assistent/einstellungen");
+  redirect("/telefon-assistent");
 }
 
 export async function toggleAssistantStatus() {
