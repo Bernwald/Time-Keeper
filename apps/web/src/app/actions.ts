@@ -362,6 +362,332 @@ export async function deleteSource(id: string) {
   redirect("/sources");
 }
 
+// ─── PROCESSES ──────────────────────────────────────────────────────────
+
+export async function createProcessTemplate(formData: FormData) {
+  const name = formData.get("name") as string;
+  const description = formData.get("description") as string;
+  const category = formData.get("category") as string;
+  const stepsJson = formData.get("steps") as string;
+
+  if (!name?.trim()) return;
+
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  const { data, error } = await db
+    .from("process_templates")
+    .insert({
+      organization_id: orgId,
+      name: name.trim(),
+      description: description?.trim() || null,
+      category: category?.trim() || null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return;
+
+  // Insert steps
+  if (stepsJson) {
+    try {
+      const steps = JSON.parse(stepsJson) as {
+        name: string;
+        description?: string;
+        expected_duration_days?: number;
+        responsible_role?: string;
+      }[];
+      if (steps.length > 0) {
+        await db.from("process_template_steps").insert(
+          steps.map((s, i) => ({
+            template_id: data.id,
+            step_order: i + 1,
+            name: s.name,
+            description: s.description || null,
+            expected_duration_days: s.expected_duration_days || null,
+            responsible_role: s.responsible_role || null,
+          })),
+        );
+      }
+    } catch {
+      // Invalid JSON — skip steps
+    }
+  }
+
+  revalidatePath("/processes");
+  redirect("/processes");
+}
+
+export async function deleteProcessTemplate(id: string) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("process_template_steps").delete().eq("template_id", id);
+  await db.from("process_templates").delete().eq("id", id).eq("organization_id", orgId);
+  revalidatePath("/processes");
+  redirect("/processes");
+}
+
+export async function createProcessInstance(formData: FormData) {
+  const templateId = formData.get("template_id") as string;
+  const name = formData.get("name") as string;
+  const projectId = formData.get("project_id") as string;
+  const companyId = formData.get("company_id") as string;
+
+  if (!templateId || !name?.trim()) return;
+
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  // Get template steps
+  const { data: templateSteps } = await db
+    .from("process_template_steps")
+    .select("*")
+    .eq("template_id", templateId)
+    .order("step_order");
+
+  const { data, error } = await db
+    .from("process_instances")
+    .insert({
+      organization_id: orgId,
+      template_id: templateId,
+      name: name.trim(),
+      project_id: projectId || null,
+      company_id: companyId || null,
+      status: "active",
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return;
+
+  // Copy template steps to instance
+  if (templateSteps && templateSteps.length > 0) {
+    await db.from("process_instance_steps").insert(
+      templateSteps.map((ts) => ({
+        instance_id: data.id,
+        template_step_id: ts.id,
+        step_order: ts.step_order,
+        name: ts.name,
+        status: "pending",
+      })),
+    );
+  }
+
+  revalidatePath("/processes");
+  redirect(`/processes/${data.id}`);
+}
+
+export async function updateProcessStep(
+  stepId: string,
+  instanceId: string,
+  status: string,
+) {
+  const db = createServiceClient();
+  const now = new Date().toISOString();
+
+  const updates: Record<string, unknown> = { status };
+  if (status === "in_progress" ) {
+    updates.started_at = now;
+  } else if (status === "completed") {
+    updates.completed_at = now;
+  }
+
+  await db.from("process_instance_steps").update(updates).eq("id", stepId);
+
+  // Check if all steps are completed → mark instance as completed
+  const { data: steps } = await db
+    .from("process_instance_steps")
+    .select("status")
+    .eq("instance_id", instanceId);
+
+  if (steps && steps.every((s) => s.status === "completed" || s.status === "skipped")) {
+    await db
+      .from("process_instances")
+      .update({ status: "completed", completed_at: now })
+      .eq("id", instanceId);
+  }
+
+  revalidatePath(`/processes/${instanceId}`);
+}
+
+export async function deleteProcessInstance(id: string) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("process_instance_steps").delete().eq("instance_id", id);
+  await db.from("process_instances").delete().eq("id", id).eq("organization_id", orgId);
+  revalidatePath("/processes");
+  redirect("/processes");
+}
+
+// ─── ACTIVITIES ──────────────────────────────────────────────────────────
+
+export async function createActivity(formData: FormData) {
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const activityType = formData.get("activity_type") as string;
+  const occurredAt = formData.get("occurred_at") as string;
+  const durationMinutes = formData.get("duration_minutes") as string;
+  const linkType = formData.get("link_type") as string;
+  const linkId = formData.get("link_id") as string;
+
+  if (!title?.trim() || !activityType) return;
+
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  const { data, error } = await db
+    .from("activities")
+    .insert({
+      organization_id: orgId,
+      activity_type: activityType,
+      title: title.trim(),
+      description: description?.trim() || null,
+      occurred_at: occurredAt || new Date().toISOString(),
+      duration_minutes: durationMinutes ? parseInt(durationMinutes, 10) : null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return;
+
+  // Link to entity if provided
+  if (linkType && linkId) {
+    await db.from("activity_links").insert({
+      organization_id: orgId,
+      activity_id: data.id,
+      linked_type: linkType,
+      linked_id: linkId,
+    });
+  }
+
+  // Auto-RAG: create source from activity text for RAG searchability
+  const textForRag = description?.trim();
+  if (textForRag && textForRag.length > 20) {
+    const { data: source } = await db
+      .from("sources")
+      .insert({
+        organization_id: orgId,
+        title: `[${activityType}] ${title.trim()}`,
+        description: `Automatisch erstellt aus Aktivitaet vom ${new Date(occurredAt || Date.now()).toLocaleDateString("de-DE")}`,
+        source_type: "activity_note",
+        raw_text: textForRag,
+        word_count: countWords(textForRag),
+        status: "processing",
+      })
+      .select("id")
+      .single();
+
+    if (source) {
+      await storeChunks(source.id, textForRag, orgId);
+      await db.from("sources").update({ status: "ready" }).eq("id", source.id);
+
+      // Link source to same entity as the activity
+      if (linkType && linkId) {
+        await db.from("source_links").upsert(
+          {
+            organization_id: orgId,
+            source_id: source.id,
+            linked_type: linkType,
+            linked_id: linkId,
+            link_role: "activity",
+          },
+          { onConflict: "source_id,linked_type,linked_id" },
+        );
+      }
+    }
+  }
+
+  revalidatePath("/activities");
+  if (linkType && linkId) {
+    revalidatePath(`/${linkType === "company" ? "companies" : linkType === "contact" ? "contacts" : "projects"}/${linkId}`);
+  }
+  redirect("/activities");
+}
+
+export async function deleteActivity(id: string) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("activity_links").delete().eq("activity_id", id);
+  await db.from("activities").delete().eq("id", id).eq("organization_id", orgId);
+  revalidatePath("/activities");
+  redirect("/activities");
+}
+
+// ─── TAGS ────────────────────────────────────────────────────────────────
+
+export async function createTag(formData: FormData) {
+  const name = formData.get("name") as string;
+  const color = formData.get("color") as string;
+  const category = formData.get("category") as string;
+
+  if (!name?.trim()) return;
+
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("tags").insert({
+    organization_id: orgId,
+    name: name.trim(),
+    color: color?.trim() || null,
+    category: category?.trim() || null,
+  });
+  revalidatePath("/admin/tags");
+}
+
+export async function updateTag(id: string, formData: FormData) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db
+    .from("tags")
+    .update({
+      name: (formData.get("name") as string).trim(),
+      color: (formData.get("color") as string)?.trim() || null,
+      category: (formData.get("category") as string)?.trim() || null,
+    })
+    .eq("id", id)
+    .eq("organization_id", orgId);
+  revalidatePath("/admin/tags");
+}
+
+export async function deleteTag(id: string) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("entity_tags").delete().eq("tag_id", id);
+  await db.from("tags").delete().eq("id", id).eq("organization_id", orgId);
+  revalidatePath("/admin/tags");
+}
+
+export async function addEntityTag(
+  tagId: string,
+  entityType: string,
+  entityId: string,
+) {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+  await db.from("entity_tags").upsert(
+    {
+      organization_id: orgId,
+      tag_id: tagId,
+      entity_type: entityType,
+      entity_id: entityId,
+    },
+    { onConflict: "tag_id,entity_type,entity_id" },
+  );
+}
+
+export async function removeEntityTag(
+  tagId: string,
+  entityType: string,
+  entityId: string,
+) {
+  const db = createServiceClient();
+  await db
+    .from("entity_tags")
+    .delete()
+    .eq("tag_id", tagId)
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId);
+}
+
 // ─── COMPANIES ────────────────────────────────────────────────────────────
 
 export async function createCompany(formData: FormData) {

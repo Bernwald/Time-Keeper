@@ -2,16 +2,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContactById } from "@/lib/db/queries/contacts";
 import { listSourcesForEntity } from "@/lib/db/queries/source-links";
+import { getTagsForEntity, listTags } from "@/lib/db/queries/tags";
+import { getActivitiesForEntity } from "@/lib/db/queries/activities";
 import { updateContact, deleteContact } from "@/app/actions";
+import { TagManager } from "@/components/tags/tag-manager";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export const dynamic = 'force-dynamic';
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [contact, linkedSources] = await Promise.all([
+  const [contact, linkedSources, entityTags, allTags, activities] = await Promise.all([
     getContactById(id),
     listSourcesForEntity("contact", id),
+    getTagsForEntity("contact", id),
+    listTags(),
+    getActivitiesForEntity("contact", id),
   ]);
   if (!contact) notFound();
 
@@ -27,6 +34,14 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       <h1 className="text-xl md:text-2xl font-semibold animate-fade-in" style={styles.title}>
         {contact.first_name} {contact.last_name}
       </h1>
+
+      {/* Tags */}
+      <div className="animate-fade-in">
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--color-placeholder)" }}>
+          Tags
+        </p>
+        <TagManager entityType="contact" entityId={id} currentTags={entityTags} allTags={allTags} />
+      </div>
 
       <form action={updateAction} className={`${card.base} flex flex-col gap-5 animate-slide-up`} style={styles.panel}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -73,6 +88,11 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           <button type="submit" className={btn.primary} style={styles.accent}>Speichern</button>
         </div>
       </form>
+
+      {/* Activity Timeline */}
+      <div className="animate-fade-in">
+        <ActivityTimeline activities={activities} entityType="contact" entityId={id} />
+      </div>
 
       {/* Linked Sources */}
       {linkedSources.length > 0 && (

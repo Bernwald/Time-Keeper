@@ -2,16 +2,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProjectById } from "@/lib/db/queries/projects";
 import { listSourcesForEntity } from "@/lib/db/queries/source-links";
+import { getTagsForEntity, listTags } from "@/lib/db/queries/tags";
+import { getActivitiesForEntity } from "@/lib/db/queries/activities";
+import { getInstancesForEntity } from "@/lib/db/queries/processes";
 import { updateProject, deleteProject } from "@/app/actions";
+import { TagManager } from "@/components/tags/tag-manager";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { ProcessList } from "@/components/processes/process-list";
 import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [project, linkedSources] = await Promise.all([
+  const [project, linkedSources, entityTags, allTags, activities, processInstances] = await Promise.all([
     getProjectById(id),
     listSourcesForEntity("project", id),
+    getTagsForEntity("project", id),
+    listTags(),
+    getActivitiesForEntity("project", id),
+    getInstancesForEntity("project", id),
   ]);
   if (!project) notFound();
 
@@ -25,6 +35,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </Link>
 
       <h1 className="text-xl md:text-2xl font-semibold animate-fade-in" style={styles.title}>{project.name}</h1>
+
+      {/* Tags */}
+      <div className="animate-fade-in">
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--color-placeholder)" }}>
+          Tags
+        </p>
+        <TagManager entityType="project" entityId={id} currentTags={entityTags} allTags={allTags} />
+      </div>
 
       <form action={updateAction} className={`${card.base} flex flex-col gap-5 animate-slide-up`} style={styles.panel}>
         <div className="flex flex-col gap-1.5">
@@ -50,6 +68,16 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <button type="submit" className={btn.primary} style={styles.accent}>Speichern</button>
         </div>
       </form>
+
+      {/* Process Instances */}
+      <div className="animate-fade-in">
+        <ProcessList instances={processInstances} />
+      </div>
+
+      {/* Activity Timeline */}
+      <div className="animate-fade-in">
+        <ActivityTimeline activities={activities} entityType="project" entityId={id} />
+      </div>
 
       {/* Linked Sources */}
       {linkedSources.length > 0 && (

@@ -2,16 +2,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCompanyById } from "@/lib/db/queries/companies";
 import { listSourcesForEntity } from "@/lib/db/queries/source-links";
+import { getTagsForEntity, listTags } from "@/lib/db/queries/tags";
+import { getActivitiesForEntity } from "@/lib/db/queries/activities";
+import { getInstancesForEntity } from "@/lib/db/queries/processes";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { ProcessList } from "@/components/processes/process-list";
 import { updateCompany, deleteCompany } from "@/app/actions";
+import { TagManager } from "@/components/tags/tag-manager";
 import { card, badge, btn, input, page, styles } from "@/components/ui/table-classes";
 
 export const dynamic = 'force-dynamic';
 
 export default async function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [company, linkedSources] = await Promise.all([
+  const [company, linkedSources, entityTags, allTags, activities, processInstances] = await Promise.all([
     getCompanyById(id),
     listSourcesForEntity("company", id),
+    getTagsForEntity("company", id),
+    listTags(),
+    getActivitiesForEntity("company", id),
+    getInstancesForEntity("company", id),
   ]);
   if (!company) notFound();
 
@@ -25,6 +35,14 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
       </Link>
 
       <h1 className="text-xl md:text-2xl font-semibold animate-fade-in" style={styles.title}>{company.name}</h1>
+
+      {/* Tags */}
+      <div className="animate-fade-in">
+        <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--color-placeholder)" }}>
+          Tags
+        </p>
+        <TagManager entityType="company" entityId={id} currentTags={entityTags} allTags={allTags} />
+      </div>
 
       <form action={updateAction} className={`${card.base} flex flex-col gap-5 animate-slide-up`} style={styles.panel}>
         <div className="flex flex-col gap-1.5">
@@ -51,6 +69,16 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
           <button type="submit" className={btn.primary} style={styles.accent}>Speichern</button>
         </div>
       </form>
+
+      {/* Process Instances */}
+      <div className="animate-fade-in">
+        <ProcessList instances={processInstances} />
+      </div>
+
+      {/* Activity Timeline */}
+      <div className="animate-fade-in">
+        <ActivityTimeline activities={activities} entityType="company" entityId={id} />
+      </div>
 
       {/* Linked Sources */}
       {linkedSources.length > 0 && (

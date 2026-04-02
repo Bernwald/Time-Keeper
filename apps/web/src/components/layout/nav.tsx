@@ -78,6 +78,22 @@ function IconProjects({ size = 20 }: { size?: number }) {
   );
 }
 
+function IconActivities({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function IconProcesses({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
 function IconAdmin({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -126,6 +142,8 @@ const groups: NavGroup[] = [
       { href: "/companies", label: "Unternehmen", icon: IconCompany },
       { href: "/contacts", label: "Kontakte", icon: IconContacts },
       { href: "/projects", label: "Projekte", icon: IconProjects },
+      { href: "/activities", label: "Aktivitäten", icon: IconActivities },
+      { href: "/processes", label: "Prozesse", icon: IconProcesses },
     ],
   },
 ];
