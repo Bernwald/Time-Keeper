@@ -121,6 +121,74 @@
   --content-max-w: 960px;
 }
 
+/* ─── DARK MODE ────────────────────────────────────────────────────── */
+
+.dark {
+  --color-bg: #0c0f17;
+  --color-bg-elevated: #151925;
+  --color-panel: #1a1f2e;
+  --color-panel-strong: #1e2435;
+  --color-line: #2a3040;
+  --color-line-soft: #1e2435;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-muted: #94a3b8;
+  --color-placeholder: #475569;
+  --color-accent: #14b8a6;
+  --color-accent-hover: #2dd4bf;
+  --color-accent-soft: #0d3d38;
+  --color-accent-text: #ffffff;
+  --color-danger: #f87171;
+  --color-danger-hover: #ef4444;
+  --color-danger-soft: #3b1111;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3b2a06;
+  --color-info: #60a5fa;
+  --color-info-soft: #172554;
+  --color-success: #34d399;
+  --color-success-soft: #052e1c;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-bg: #0c0f17;
+    --color-bg-elevated: #151925;
+    --color-panel: #1a1f2e;
+    --color-panel-strong: #1e2435;
+    --color-line: #2a3040;
+    --color-line-soft: #1e2435;
+    --color-text: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-muted: #94a3b8;
+    --color-placeholder: #475569;
+    --color-accent: #14b8a6;
+    --color-accent-hover: #2dd4bf;
+    --color-accent-soft: #0d3d38;
+    --color-accent-text: #ffffff;
+    --color-danger: #f87171;
+    --color-danger-hover: #ef4444;
+    --color-danger-soft: #3b1111;
+    --color-warning: #fbbf24;
+    --color-warning-soft: #3b2a06;
+    --color-info: #60a5fa;
+    --color-info-soft: #172554;
+    --color-success: #34d399;
+    --color-success-soft: #052e1c;
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+    --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+}
+
 /* ─── BASE ──────────────────────────────────────────────────────────── */
 
 * {
@@ -224,3 +292,9 @@ button, input, select, textarea {
 .gradient-subtle {
   background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 50%, #eff6ff 100%);
 }
+
+.dark .gradient-subtle {
+  background: linear-gradient(135deg, #0c1a17 0%, #0c1520 50%, #0f1630 100%);
+}
+
+.dark ::selection { background: var(--color-accent-soft); color: var(--color-accent); }

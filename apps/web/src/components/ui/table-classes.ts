@@ -55,11 +55,11 @@ export const page = {
 // Style maps for consistent inline styles
 export const styles = {
   panel: {
-    background: "#fff",
+    background: "var(--color-panel)",
     border: "1px solid var(--color-line)",
   },
   panelStrong: {
-    background: "#fff",
+    background: "var(--color-panel-strong)",
     border: "1px solid var(--color-line)",
   },
   input: {

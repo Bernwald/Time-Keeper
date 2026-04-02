@@ -50,7 +50,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   }
 
   return (
-    <html lang="de" className={`${fraunces.variable} ${dmSans.variable}`}>
+    <html lang="de" className={`${fraunces.variable} ${dmSans.variable}`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var d=document.documentElement;var m=window.matchMedia('(prefers-color-scheme:dark)');if(m.matches)d.classList.add('dark')}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body>
         <AuthProvider initialUser={user}>
           {user ? (

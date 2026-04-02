@@ -21,7 +21,7 @@ Wiederverwendbare AI Foundation Platform. Eigenes Startup = erster Tenant. Gleic
 ## Regeln (nicht verhandelbar)
 
 1. **Kein lokaler Dev-Server** — kein `npm run dev/build`. Push → Vercel verifiziert.
-2. **Tokens only** — Farben/Radii nur aus `globals.css`. Keine Ad-hoc-Farben.
+2. **Tokens only + Dark Mode** — Farben/Radii nur aus `globals.css`. Keine Ad-hoc-Farben (`#fff`, `bg-white` etc.). Dark Mode ist aktiv — alle neuen Features müssen mit Light- und Dark-Tokens funktionieren.
 3. **Mobile-first ab 360px** — Breakpoints: `md:` 768px · `lg:` 1024px. Kein horizontaler Scroll.
 4. **Touch: 44px** — `min-h-[44px] min-w-[44px]` auf allen interaktiven Elementen.
 5. **Safe Area** — Bottom-Elemente: `pb-[env(safe-area-inset-bottom)]`
