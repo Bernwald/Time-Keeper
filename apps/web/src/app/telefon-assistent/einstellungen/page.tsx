@@ -4,6 +4,7 @@ import { VOICE_OPTIONS, LANGUAGE_MODES } from "@/lib/constants/phone-assistant";
 import { createOrUpdateAssistant, toggleAssistantStatus, provisionVapiAssistant, syncVapiConfig } from "../actions";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { VapiActionButton } from "@/components/phone/vapi-action-button";
 
 export default async function AssistantSettingsPage() {
   const assistant = await getAssistant();
@@ -311,9 +312,11 @@ export default async function AssistantSettingsPage() {
               <p className="text-xs" style={{ color: "var(--color-muted)" }}>
                 Provider-ID: {assistant.provider_assistant_id}
               </p>
-              <form action={syncVapiConfig}>
-                <SubmitButton label="Config synchronisieren" pendingLabel="Synchronisiere..." />
-              </form>
+              <VapiActionButton
+                action={syncVapiConfig}
+                label="Config synchronisieren"
+                pendingLabel="Synchronisiere..."
+              />
             </>
           ) : (
             <>
@@ -321,9 +324,11 @@ export default async function AssistantSettingsPage() {
                 Der Assistent muss bei Vapi registriert werden, damit eingehende Anrufe
                 an die RAG-Pipeline weitergeleitet werden.
               </p>
-              <form action={provisionVapiAssistant}>
-                <SubmitButton label="Bei Vapi registrieren" pendingLabel="Wird registriert..." />
-              </form>
+              <VapiActionButton
+                action={provisionVapiAssistant}
+                label="Bei Vapi registrieren"
+                pendingLabel="Wird registriert..."
+              />
             </>
           )}
         </div>

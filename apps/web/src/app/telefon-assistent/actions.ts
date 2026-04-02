@@ -125,7 +125,12 @@ async function vapiRequest(
   }
 }
 
-export async function provisionVapiAssistant() {
+export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = getVapiKey();
+  if (!apiKey) {
+    return { ok: false, error: "VAPI_API_KEY ist nicht konfiguriert. Bitte in Vercel Env-Variablen hinterlegen." };
+  }
+
   const orgId = await requireOrgId();
   const db = createServiceClient();
 
@@ -137,14 +142,12 @@ export async function provisionVapiAssistant() {
     .single();
 
   if (!pa) {
-    console.error("No phone assistant config found");
-    return;
+    return { ok: false, error: "Kein Telefonassistent konfiguriert. Bitte zuerst Einstellungen speichern." };
   }
 
   if (pa.provider_assistant_id) {
-    console.log("Assistant already provisioned:", pa.provider_assistant_id);
     revalidatePath("/telefon-assistent/einstellungen");
-    return;
+    return { ok: true };
   }
 
   const serverUrl = process.env.VAPI_SERVER_URL
@@ -157,7 +160,7 @@ export async function provisionVapiAssistant() {
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
-      messages: [{ role: "system", content: pa.system_prompt }],
+      messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
       tools: [
         {
           type: "function",
@@ -184,7 +187,7 @@ export async function provisionVapiAssistant() {
 
   if (!result.ok) {
     console.error("Vapi create assistant error:", result.error);
-    return;
+    return { ok: false, error: `Vapi-Fehler: ${result.error}` };
   }
 
   const vapiId = result.data?.id as string;
@@ -199,9 +202,15 @@ export async function provisionVapiAssistant() {
 
   revalidatePath("/telefon-assistent");
   revalidatePath("/telefon-assistent/einstellungen");
+  return { ok: true };
 }
 
-export async function syncVapiConfig() {
+export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }> {
+  const apiKey = getVapiKey();
+  if (!apiKey) {
+    return { ok: false, error: "VAPI_API_KEY ist nicht konfiguriert." };
+  }
+
   const orgId = await requireOrgId();
   const db = createServiceClient();
 
@@ -212,15 +221,14 @@ export async function syncVapiConfig() {
     .single();
 
   if (!pa?.provider_assistant_id) {
-    console.log("No provider assistant to sync");
-    return;
+    return { ok: false, error: "Kein Provider-Assistent vorhanden." };
   }
 
   const result = await vapiRequest(`/assistant/${pa.provider_assistant_id}`, "PATCH", {
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
-      messages: [{ role: "system", content: pa.system_prompt }],
+      messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
     },
     voice: {
       provider: "openai",
@@ -232,10 +240,12 @@ export async function syncVapiConfig() {
 
   if (!result.ok) {
     console.error("Vapi sync error:", result.error);
+    return { ok: false, error: `Vapi-Fehler: ${result.error}` };
   }
 
   revalidatePath("/telefon-assistent");
   revalidatePath("/telefon-assistent/einstellungen");
+  return { ok: true };
 }
 
 // ─── PHONE NUMBERS ─────────────────────────────────────────────────────────
