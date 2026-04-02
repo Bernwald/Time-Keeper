@@ -40,13 +40,16 @@ CREATE TABLE IF NOT EXISTS public.organization_features (
 ALTER TABLE public.feature_flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.organization_features ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "feature_flags_read" ON public.feature_flags;
 CREATE POLICY "feature_flags_read" ON public.feature_flags
   FOR SELECT USING (TRUE);
 
+DROP POLICY IF EXISTS "org_features_read" ON public.organization_features;
 CREATE POLICY "org_features_read" ON public.organization_features
   FOR SELECT USING (public.is_member_of_org(organization_id));
 
 -- Trigger
+DROP TRIGGER IF EXISTS set_updated_at_org_features ON public.organization_features;
 CREATE TRIGGER set_updated_at_org_features
   BEFORE UPDATE ON public.organization_features
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

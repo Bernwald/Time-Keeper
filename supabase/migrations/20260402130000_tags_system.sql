@@ -34,10 +34,12 @@ CREATE INDEX IF NOT EXISTS idx_entity_tags_tag ON public.entity_tags (tag_id);
 ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.entity_tags ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "tags_org_all" ON public.tags;
 CREATE POLICY "tags_org_all" ON public.tags
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));
 
+DROP POLICY IF EXISTS "entity_tags_org_all" ON public.entity_tags;
 CREATE POLICY "entity_tags_org_all" ON public.entity_tags
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));

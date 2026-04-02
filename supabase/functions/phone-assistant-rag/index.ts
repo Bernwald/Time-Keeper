@@ -16,7 +16,12 @@ type VapiMessage = {
   message: {
     type: string;
     // assistant-request
-    call?: { phoneNumber?: { number?: string }; customer?: { number?: string } };
+    call?: {
+      phoneNumber?: { number?: string };
+      customer?: { number?: string };
+      assistantId?: string;
+      assistant?: { id?: string };
+    };
     // function-call
     functionCall?: {
       name: string;
@@ -28,6 +33,8 @@ type VapiMessage = {
       type: string;
       function: { name: string; arguments: string };
     }>;
+    // top-level assistant reference
+    assistant?: { id?: string };
   };
 };
 
@@ -66,24 +73,18 @@ Deno.serve(async (req: Request) => {
 
   const messageType = payload.message?.type;
 
+  console.log(`[phone-rag] messageType=${messageType}, phone=${payload.message?.call?.phoneNumber?.number ?? "none"}, assistantId=${payload.message?.call?.assistantId ?? "none"}`);
+
   // ─── ASSISTANT REQUEST ────────────────────────────────────────────
   // Vapi calls this when a new call starts to get assistant config
   if (messageType === "assistant-request") {
-    const calledNumber =
-      payload.message.call?.phoneNumber?.number ?? "";
+    const assistant = await resolveAssistantConfig(payload.message);
 
-    const db = getServiceClient();
-    const { data: config } = await db.rpc("get_org_for_phone_number", {
-      p_phone_number: calledNumber,
-    });
-
-    if (!config || config.length === 0) {
+    if (!assistant) {
       return jsonResponse({
         error: "No assistant configured for this number",
       }, 404);
     }
-
-    const assistant = config[0];
 
     // Check business hours
     if (assistant.business_hours_start && assistant.business_hours_end) {
@@ -193,16 +194,10 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Get org from call context — we need the called number
-        const calledNumber =
-          payload.message.call?.phoneNumber?.number ?? "";
+        // Get org from call context (phone number or assistantId fallback)
+        const assistant = await resolveAssistantConfig(payload.message);
 
-        const db = getServiceClient();
-        const { data: config } = await db.rpc("get_org_for_phone_number", {
-          p_phone_number: calledNumber,
-        });
-
-        if (!config || config.length === 0) {
+        if (!assistant) {
           results.push({
             toolCallId: toolCall.id,
             result: "Kein Assistent konfiguriert.",
@@ -210,7 +205,6 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        const assistant = config[0];
         const context = await searchKnowledge(
           assistant.org_id,
           query,
@@ -245,19 +239,12 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ result: "Keine Suchanfrage angegeben." });
     }
 
-    const calledNumber =
-      payload.message.call?.phoneNumber?.number ?? "";
+    const assistant = await resolveAssistantConfig(payload.message);
 
-    const db = getServiceClient();
-    const { data: config } = await db.rpc("get_org_for_phone_number", {
-      p_phone_number: calledNumber,
-    });
-
-    if (!config || config.length === 0) {
+    if (!assistant) {
       return jsonResponse({ result: "Kein Assistent konfiguriert." });
     }
 
-    const assistant = config[0];
     const context = await searchKnowledge(
       assistant.org_id,
       query,
@@ -276,6 +263,67 @@ Deno.serve(async (req: Request) => {
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+type AssistantConfig = {
+  org_id: string;
+  assistant_id: string;
+  assistant_name: string;
+  system_prompt: string;
+  greeting_de: string;
+  greeting_en: string;
+  voice_id_de: string;
+  voice_id_en: string;
+  language_mode: string;
+  max_chunks: number;
+  boost_factor: number;
+  max_call_duration_seconds: number;
+  business_hours_start: string;
+  business_hours_end: string;
+  business_hours_tz: string;
+  after_hours_message: string;
+};
+
+/**
+ * Resolve assistant config from call context.
+ * Priority: phone number → provider_assistant_id (fallback for Talk button / browser calls)
+ */
+async function resolveAssistantConfig(
+  message: VapiMessage["message"],
+): Promise<AssistantConfig | null> {
+  const db = getServiceClient();
+  const calledNumber = message.call?.phoneNumber?.number ?? "";
+  // Vapi sends assistantId in different locations depending on message type
+  const providerAssistantId =
+    message.call?.assistantId
+    ?? message.call?.assistant?.id
+    ?? message.assistant?.id
+    ?? "";
+
+  // Try phone number first
+  if (calledNumber) {
+    const { data } = await db.rpc("get_org_for_phone_number", {
+      p_phone_number: calledNumber,
+    });
+    if (data && data.length > 0) {
+      console.log("Resolved org via phone number:", calledNumber);
+      return data[0];
+    }
+  }
+
+  // Fallback: resolve via provider_assistant_id (Vapi Talk button, browser calls)
+  if (providerAssistantId) {
+    const { data } = await db.rpc("get_org_for_provider_assistant", {
+      p_provider_assistant_id: providerAssistantId,
+    });
+    if (data && data.length > 0) {
+      console.log("Resolved org via provider_assistant_id:", providerAssistantId);
+      return data[0];
+    }
+  }
+
+  console.error("Could not resolve org. calledNumber:", calledNumber, "assistantId:", providerAssistantId);
+  return null;
+}
 
 async function searchKnowledge(
   orgId: string,

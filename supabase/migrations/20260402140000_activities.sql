@@ -36,6 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_links_entity ON public.activity_links (l
 
 -- ─── TRIGGERS ───────────────────────────────────────────────────────────
 
+DROP TRIGGER IF EXISTS set_updated_at_activities ON public.activities;
 CREATE TRIGGER set_updated_at_activities
   BEFORE UPDATE ON public.activities
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -45,10 +46,12 @@ CREATE TRIGGER set_updated_at_activities
 ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_links ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "activities_org_all" ON public.activities;
 CREATE POLICY "activities_org_all" ON public.activities
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));
 
+DROP POLICY IF EXISTS "activity_links_org_all" ON public.activity_links;
 CREATE POLICY "activity_links_org_all" ON public.activity_links
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));

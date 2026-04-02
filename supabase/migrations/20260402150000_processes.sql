@@ -70,10 +70,12 @@ CREATE INDEX IF NOT EXISTS idx_instance_steps_instance ON public.process_instanc
 
 -- ─── TRIGGERS ───────────────────────────────────────────────────────────
 
+DROP TRIGGER IF EXISTS set_updated_at_process_templates ON public.process_templates;
 CREATE TRIGGER set_updated_at_process_templates
   BEFORE UPDATE ON public.process_templates
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS set_updated_at_process_instances ON public.process_instances;
 CREATE TRIGGER set_updated_at_process_instances
   BEFORE UPDATE ON public.process_instances
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
@@ -85,11 +87,13 @@ ALTER TABLE public.process_template_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.process_instances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.process_instance_steps ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "process_templates_org_all" ON public.process_templates;
 CREATE POLICY "process_templates_org_all" ON public.process_templates
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));
 
 -- Template steps: access via template's org
+DROP POLICY IF EXISTS "process_template_steps_org_all" ON public.process_template_steps;
 CREATE POLICY "process_template_steps_org_all" ON public.process_template_steps
   FOR ALL USING (
     EXISTS (
@@ -104,11 +108,13 @@ CREATE POLICY "process_template_steps_org_all" ON public.process_template_steps
     )
   );
 
+DROP POLICY IF EXISTS "process_instances_org_all" ON public.process_instances;
 CREATE POLICY "process_instances_org_all" ON public.process_instances
   FOR ALL USING (public.is_member_of_org(organization_id))
   WITH CHECK (public.is_member_of_org(organization_id));
 
 -- Instance steps: access via instance's org
+DROP POLICY IF EXISTS "process_instance_steps_org_all" ON public.process_instance_steps;
 CREATE POLICY "process_instance_steps_org_all" ON public.process_instance_steps
   FOR ALL USING (
     EXISTS (

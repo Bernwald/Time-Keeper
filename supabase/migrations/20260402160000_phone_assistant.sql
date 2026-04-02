@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS moddatetime SCHEMA extensions;
 -- ─── TABLES ────────────────────────────────────────────────────────────────
 
 -- Config per org (1:1)
-CREATE TABLE phone_assistants (
+CREATE TABLE IF NOT EXISTS phone_assistants (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name          TEXT NOT NULL DEFAULT 'Telefonassistent',
@@ -47,7 +47,7 @@ CREATE TABLE phone_assistants (
 );
 
 -- Phone numbers per org (1:n)
-CREATE TABLE phone_numbers (
+CREATE TABLE IF NOT EXISTS phone_numbers (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   assistant_id    UUID NOT NULL REFERENCES phone_assistants(id) ON DELETE CASCADE,
@@ -63,7 +63,7 @@ CREATE TABLE phone_numbers (
 );
 
 -- Call logs
-CREATE TABLE call_logs (
+CREATE TABLE IF NOT EXISTS call_logs (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   assistant_id    UUID NOT NULL REFERENCES phone_assistants(id) ON DELETE CASCADE,
@@ -104,22 +104,25 @@ CREATE TABLE call_logs (
 );
 
 -- Indexes
-CREATE INDEX idx_phone_numbers_org ON phone_numbers(organization_id);
-CREATE INDEX idx_phone_numbers_number ON phone_numbers(phone_number);
-CREATE INDEX idx_call_logs_org ON call_logs(organization_id);
-CREATE INDEX idx_call_logs_started ON call_logs(organization_id, started_at DESC);
-CREATE INDEX idx_call_logs_contact ON call_logs(contact_id) WHERE contact_id IS NOT NULL;
-CREATE INDEX idx_call_logs_provider ON call_logs(provider_call_id) WHERE provider_call_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_phone_numbers_org ON phone_numbers(organization_id);
+CREATE INDEX IF NOT EXISTS idx_phone_numbers_number ON phone_numbers(phone_number);
+CREATE INDEX IF NOT EXISTS idx_call_logs_org ON call_logs(organization_id);
+CREATE INDEX IF NOT EXISTS idx_call_logs_started ON call_logs(organization_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_call_logs_contact ON call_logs(contact_id) WHERE contact_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_call_logs_provider ON call_logs(provider_call_id) WHERE provider_call_id IS NOT NULL;
 
 -- Updated_at triggers
+DROP TRIGGER IF EXISTS set_phone_assistants_updated_at ON phone_assistants;
 CREATE TRIGGER set_phone_assistants_updated_at
   BEFORE UPDATE ON phone_assistants
   FOR EACH ROW EXECUTE FUNCTION extensions.moddatetime(updated_at);
 
+DROP TRIGGER IF EXISTS set_phone_numbers_updated_at ON phone_numbers;
 CREATE TRIGGER set_phone_numbers_updated_at
   BEFORE UPDATE ON phone_numbers
   FOR EACH ROW EXECUTE FUNCTION extensions.moddatetime(updated_at);
 
+DROP TRIGGER IF EXISTS set_call_logs_updated_at ON call_logs;
 CREATE TRIGGER set_call_logs_updated_at
   BEFORE UPDATE ON call_logs
   FOR EACH ROW EXECUTE FUNCTION extensions.moddatetime(updated_at);
@@ -131,20 +134,26 @@ ALTER TABLE phone_numbers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE call_logs ENABLE ROW LEVEL SECURITY;
 
 -- phone_assistants
+DROP POLICY IF EXISTS "org members read phone_assistants" ON phone_assistants;
 CREATE POLICY "org members read phone_assistants" ON phone_assistants
   FOR SELECT USING (is_member_of_org(organization_id));
+DROP POLICY IF EXISTS "org members write phone_assistants" ON phone_assistants;
 CREATE POLICY "org members write phone_assistants" ON phone_assistants
   FOR ALL USING (is_member_of_org(organization_id));
 
 -- phone_numbers
+DROP POLICY IF EXISTS "org members read phone_numbers" ON phone_numbers;
 CREATE POLICY "org members read phone_numbers" ON phone_numbers
   FOR SELECT USING (is_member_of_org(organization_id));
+DROP POLICY IF EXISTS "org members write phone_numbers" ON phone_numbers;
 CREATE POLICY "org members write phone_numbers" ON phone_numbers
   FOR ALL USING (is_member_of_org(organization_id));
 
 -- call_logs
+DROP POLICY IF EXISTS "org members read call_logs" ON call_logs;
 CREATE POLICY "org members read call_logs" ON call_logs
   FOR SELECT USING (is_member_of_org(organization_id));
+DROP POLICY IF EXISTS "org members write call_logs" ON call_logs;
 CREATE POLICY "org members write call_logs" ON call_logs
   FOR ALL USING (is_member_of_org(organization_id));
 
