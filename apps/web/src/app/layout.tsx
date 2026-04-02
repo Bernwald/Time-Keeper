@@ -5,6 +5,7 @@ import { Shell } from "@/components/layout/shell";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { getUser } from "@/lib/db/supabase-server";
 import { getOrgBranding, isPlatformAdmin } from "@/lib/db/queries/organization";
+import { hasFeature } from "@/lib/features/flags";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -34,10 +35,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
   let branding = undefined;
   let isAdmin = false;
+  let hasPhoneAssistant = false;
 
   if (user) {
     try {
-      [branding, isAdmin] = await Promise.all([getOrgBranding(), isPlatformAdmin()]);
+      [branding, isAdmin, hasPhoneAssistant] = await Promise.all([
+        getOrgBranding(),
+        isPlatformAdmin(),
+        hasFeature("phone_assistant"),
+      ]);
     } catch {
       // User may not have org membership yet (onboarding)
     }
@@ -48,7 +54,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body>
         <AuthProvider initialUser={user}>
           {user ? (
-            <Shell branding={branding} isAdmin={isAdmin}>
+            <Shell branding={branding} isAdmin={isAdmin} hasPhoneAssistant={hasPhoneAssistant}>
               {children}
             </Shell>
           ) : (

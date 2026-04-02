@@ -94,6 +94,14 @@ function IconProcesses({ size = 20 }: { size?: number }) {
   );
 }
 
+function IconPhone({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+    </svg>
+  );
+}
+
 function IconAdmin({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -159,7 +167,7 @@ const mobileItems: NavItem[] = [
 
 // ─── Desktop sidebar nav ──────────────────────────────────────────────
 
-export function Nav({ isAdmin }: { isAdmin?: boolean }) {
+export function Nav({ isAdmin, hasPhoneAssistant }: { isAdmin?: boolean; hasPhoneAssistant?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -186,6 +194,22 @@ export function Nav({ isAdmin }: { isAdmin?: boolean }) {
           </ul>
         </div>
       ))}
+
+      {hasPhoneAssistant && (
+        <div>
+          <p
+            className="text-[11px] font-semibold uppercase tracking-widest mb-1.5 px-3"
+            style={{ color: "var(--color-placeholder)" }}
+          >
+            Premium
+          </p>
+          <ul className="flex flex-col gap-0.5">
+            <li>
+              <NavLink item={{ href: "/telefon-assistent", label: "Telefon", icon: IconPhone }} pathname={pathname} />
+            </li>
+          </ul>
+        </div>
+      )}
 
       {isAdmin && (
         <div>

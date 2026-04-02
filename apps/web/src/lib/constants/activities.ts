@@ -7,4 +7,5 @@ export const ACTIVITY_TYPES = [
   { value: "email", label: "E-Mail" },
   { value: "decision", label: "Entscheidung" },
   { value: "milestone", label: "Meilenstein" },
+  { value: "phone_call", label: "Telefonat" },
 ] as const;

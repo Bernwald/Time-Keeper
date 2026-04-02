@@ -6,9 +6,10 @@ type ShellProps = {
   children: React.ReactNode;
   branding?: OrgBranding;
   isAdmin?: boolean;
+  hasPhoneAssistant?: boolean;
 };
 
-export function Shell({ children, branding, isAdmin }: ShellProps) {
+export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellProps) {
   const displayName = branding?.displayName ?? "Time Keeper";
   const shortName = branding?.shortName ?? "TK";
 
@@ -46,7 +47,7 @@ export function Shell({ children, branding, isAdmin }: ShellProps) {
         </div>
 
         <div className="flex-1 px-3 py-3 overflow-y-auto">
-          <Nav isAdmin={isAdmin} />
+          <Nav isAdmin={isAdmin} hasPhoneAssistant={hasPhoneAssistant} />
         </div>
 
         <div className="p-4 border-t" style={{ borderColor: "var(--color-line)" }}>
