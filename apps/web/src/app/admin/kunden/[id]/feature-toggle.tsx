@@ -71,8 +71,9 @@ export function FeatureToggle({ orgId, feature }: Props) {
           }}
         >
           <span
-            className="absolute top-0.5 w-6 h-6 rounded-full shadow-sm transition-all" style={{ background: "var(--color-panel)" }}
+            className="absolute top-0.5 w-6 h-6 rounded-full shadow-sm transition-all"
             style={{
+              background: "var(--color-panel)",
               left: feature.enabled ? "calc(100% - 1.625rem)" : "0.125rem",
             }}
           />
