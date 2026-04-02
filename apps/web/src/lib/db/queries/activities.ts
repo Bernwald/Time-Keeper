@@ -26,14 +26,8 @@ export type ActivityLink = {
   created_at: string;
 };
 
-export const ACTIVITY_TYPES = [
-  { value: "note", label: "Notiz" },
-  { value: "meeting", label: "Meeting" },
-  { value: "call", label: "Anruf" },
-  { value: "email", label: "E-Mail" },
-  { value: "decision", label: "Entscheidung" },
-  { value: "milestone", label: "Meilenstein" },
-] as const;
+// Constants re-exported from shared module (safe for client components)
+export { ACTIVITY_TYPES } from "@/lib/constants/activities";
 
 export async function listActivities(limit = 50): Promise<Activity[]> {
   const orgId = await requireOrgId();

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createProcessTemplate } from "@/app/actions";
-import { PROCESS_CATEGORIES, RESPONSIBLE_ROLES } from "@/lib/db/queries/processes";
+import { PROCESS_CATEGORIES, RESPONSIBLE_ROLES } from "@/lib/constants/processes";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 
 type StepDraft = {

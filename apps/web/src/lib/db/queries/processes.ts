@@ -76,18 +76,8 @@ export type ProcessDashboard = {
   avg_completion_days: number | null;
 };
 
-export const PROCESS_CATEGORIES = [
-  { value: "onboarding", label: "Onboarding" },
-  { value: "integration", label: "Integration" },
-  { value: "review", label: "Review" },
-  { value: "custom", label: "Individuell" },
-] as const;
-
-export const RESPONSIBLE_ROLES = [
-  { value: "consultant", label: "Berater" },
-  { value: "client", label: "Kunde" },
-  { value: "admin", label: "Admin" },
-] as const;
+// Constants re-exported from shared module (safe for client components)
+export { PROCESS_CATEGORIES, RESPONSIBLE_ROLES } from "@/lib/constants/processes";
 
 // ─── TEMPLATES ──────────────────────────────────────────────────────────
 
