@@ -87,6 +87,74 @@ export async function toggleAssistantStatus() {
   revalidatePath("/telefon-assistent/einstellungen");
 }
 
+// ─── VAPI PROVISIONING ─────────────────────────────────────────────────────
+
+export async function provisionVapiAssistant() {
+  const orgId = await requireOrgId();
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Missing Supabase config");
+  }
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/phone-assistant-provision`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ action: "create_assistant", org_id: orgId }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Provision error:", data);
+    throw new Error(data?.error ?? "Vapi-Provisionierung fehlgeschlagen");
+  }
+
+  revalidatePath("/telefon-assistent");
+  revalidatePath("/telefon-assistent/einstellungen");
+}
+
+export async function syncVapiConfig() {
+  const orgId = await requireOrgId();
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Missing Supabase config");
+  }
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/phone-assistant-provision`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ action: "sync_config", org_id: orgId }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Sync error:", data);
+    throw new Error(data?.error ?? "Sync fehlgeschlagen");
+  }
+
+  revalidatePath("/telefon-assistent");
+  revalidatePath("/telefon-assistent/einstellungen");
+}
+
 // ─── PHONE NUMBERS ─────────────────────────────────────────────────────────
 
 export async function updatePhoneNumberName(phoneNumberId: string, displayName: string) {

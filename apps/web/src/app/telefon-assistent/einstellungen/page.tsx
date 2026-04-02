@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getAssistant } from "@/lib/db/queries/phone-assistant";
 import { VOICE_OPTIONS, LANGUAGE_MODES } from "@/lib/constants/phone-assistant";
-import { createOrUpdateAssistant, toggleAssistantStatus } from "../actions";
+import { createOrUpdateAssistant, toggleAssistantStatus, provisionVapiAssistant, syncVapiConfig } from "../actions";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -292,6 +292,42 @@ export default async function AssistantSettingsPage() {
           <SubmitButton label="Speichern" pendingLabel="Wird gespeichert..." />
         </div>
       </form>
+
+      {/* Vapi Integration */}
+      {assistant && (
+        <div className={`${card.base} flex flex-col gap-4 animate-slide-up`} style={styles.panel}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+            Vapi-Integration
+          </h2>
+
+          {assistant.provider_assistant_id ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: "var(--color-success)" }} />
+                <span className="text-xs font-medium" style={{ color: "var(--color-success)" }}>
+                  Bei Vapi registriert
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                Provider-ID: {assistant.provider_assistant_id}
+              </p>
+              <form action={syncVapiConfig}>
+                <SubmitButton label="Config synchronisieren" pendingLabel="Synchronisiere..." />
+              </form>
+            </>
+          ) : (
+            <>
+              <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                Der Assistent muss bei Vapi registriert werden, damit eingehende Anrufe
+                an die RAG-Pipeline weitergeleitet werden.
+              </p>
+              <form action={provisionVapiAssistant}>
+                <SubmitButton label="Bei Vapi registrieren" pendingLabel="Wird registriert..." />
+              </form>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
