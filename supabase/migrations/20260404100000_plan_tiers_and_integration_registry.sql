@@ -20,21 +20,7 @@ CREATE TABLE IF NOT EXISTS public.plan_tier_features (
   PRIMARY KEY (plan_id, feature_key)
 );
 
--- Add plan_id to organizations
-ALTER TABLE public.organizations
-  ADD COLUMN IF NOT EXISTS plan_id TEXT REFERENCES public.plan_tiers(id) DEFAULT 'standard';
-
--- RLS
-ALTER TABLE public.plan_tiers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.plan_tier_features ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "plan_tiers_read" ON public.plan_tiers;
-CREATE POLICY "plan_tiers_read" ON public.plan_tiers FOR SELECT USING (TRUE);
-
-DROP POLICY IF EXISTS "plan_tier_features_read" ON public.plan_tier_features;
-CREATE POLICY "plan_tier_features_read" ON public.plan_tier_features FOR SELECT USING (TRUE);
-
--- ─── SEED: PLAN TIERS ───────────────────────────────────────────────────
+-- ─── SEED: PLAN TIERS (must come BEFORE ALTER TABLE with DEFAULT) ───────
 
 INSERT INTO public.plan_tiers (id, name, description, limits, instance_type, sort_order) VALUES
   ('basic',      'Basic',      'Grundfunktionen fuer kleine Teams',
@@ -50,6 +36,20 @@ INSERT INTO public.plan_tiers (id, name, description, limits, instance_type, sor
     '{"max_sources": null, "max_members": null, "max_phone_numbers": null}',
     'dedicated', 40)
 ON CONFLICT (id) DO NOTHING;
+
+-- Add plan_id to organizations (seeds above ensure FK target exists)
+ALTER TABLE public.organizations
+  ADD COLUMN IF NOT EXISTS plan_id TEXT REFERENCES public.plan_tiers(id) DEFAULT 'standard';
+
+-- RLS for plan tables
+ALTER TABLE public.plan_tiers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.plan_tier_features ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "plan_tiers_read" ON public.plan_tiers;
+CREATE POLICY "plan_tiers_read" ON public.plan_tiers FOR SELECT USING (TRUE);
+
+DROP POLICY IF EXISTS "plan_tier_features_read" ON public.plan_tier_features;
+CREATE POLICY "plan_tier_features_read" ON public.plan_tier_features FOR SELECT USING (TRUE);
 
 -- ─── SEED: PLAN ↔ FEATURE MAPPINGS ─────────────────────────────────────
 
