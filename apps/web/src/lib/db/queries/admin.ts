@@ -212,43 +212,37 @@ export async function updateOrgPlan(orgId: string, planId: string) {
   await db.from("organizations").update({ plan_id: planId }).eq("id", orgId);
 
   // Sync organization_features: remove non-core overrides, then add plan features
-  const { data: planFeatures } = await db
-    .from("plan_tier_features")
-    .select("feature_key")
-    .eq("plan_id", planId);
-
-  const { data: coreFlags } = await db
-    .from("feature_flags")
-    .select("key")
-    .eq("is_core", true);
+  const [{ data: planFeatures }, { data: coreFlags }, { data: currentOverrides }] = await Promise.all([
+    db.from("plan_tier_features").select("feature_key").eq("plan_id", planId),
+    db.from("feature_flags").select("key").eq("is_core", true),
+    db.from("organization_features").select("feature_key").eq("organization_id", orgId),
+  ]);
 
   const coreKeys = new Set((coreFlags ?? []).map((f: any) => f.key));
   const planKeys = new Set((planFeatures ?? []).map((f: any) => f.feature_key));
 
-  // Remove overrides for features not in new plan and not core
-  const { data: currentOverrides } = await db
-    .from("organization_features")
-    .select("feature_key")
-    .eq("organization_id", orgId);
+  // Batch-remove overrides for features not in new plan and not core
+  const keysToDelete = (currentOverrides ?? [])
+    .filter((o: any) => !planKeys.has(o.feature_key) && !coreKeys.has(o.feature_key))
+    .map((o: any) => o.feature_key);
 
-  for (const override of currentOverrides ?? []) {
-    if (!planKeys.has(override.feature_key) && !coreKeys.has(override.feature_key)) {
-      await db
-        .from("organization_features")
-        .delete()
-        .eq("organization_id", orgId)
-        .eq("feature_key", override.feature_key);
-    }
+  if (keysToDelete.length > 0) {
+    await db
+      .from("organization_features")
+      .delete()
+      .eq("organization_id", orgId)
+      .in("feature_key", keysToDelete);
   }
 
-  // Add overrides for non-core plan features
-  for (const key of planKeys) {
-    if (!coreKeys.has(key)) {
-      await db.from("organization_features").upsert(
-        { organization_id: orgId, feature_key: key, enabled: true },
-        { onConflict: "organization_id,feature_key" },
-      );
-    }
+  // Batch-add overrides for non-core plan features
+  const rowsToUpsert = [...planKeys]
+    .filter((key) => !coreKeys.has(key))
+    .map((key) => ({ organization_id: orgId, feature_key: key, enabled: true }));
+
+  if (rowsToUpsert.length > 0) {
+    await db
+      .from("organization_features")
+      .upsert(rowsToUpsert, { onConflict: "organization_id,feature_key" });
   }
 }
 

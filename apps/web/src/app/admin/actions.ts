@@ -57,7 +57,7 @@ export async function updateOrganization(id: string, formData: FormData) {
 
   // Fetch current metadata to merge
   const db = createServiceClient();
-  const { data: org } = await db.from("organizations").select("metadata").eq("id", id).single();
+  const { data: org } = await db.from("organizations").select("metadata, plan_id").eq("id", id).single();
   const metadata = (org?.metadata as Record<string, unknown>) ?? {};
 
   const branding = (metadata.branding as Record<string, unknown>) ?? {};
@@ -70,8 +70,9 @@ export async function updateOrganization(id: string, formData: FormData) {
     metadata: { ...metadata, branding },
   });
 
-  // Update plan and sync features
-  if (planId) {
+  // Update plan and sync features only when plan actually changed
+  const currentPlanId = org?.plan_id ?? "standard";
+  if (planId && planId !== currentPlanId) {
     await updateOrgPlan(id, planId);
   }
 
