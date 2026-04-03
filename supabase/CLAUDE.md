@@ -11,10 +11,14 @@
 
 ## Schema-Struktur
 
-Tenant: organizations → organization_members → profiles
+Tenant: organizations (plan_id FK) → organization_members → profiles
+Plans: plan_tiers → plan_tier_features → feature_flags
 Knowledge: sources → content_chunks (+ pgvector embeddings), source_links
 Operative: companies, contacts, projects
-Features: feature_flags → organization_features
+Features: feature_flags → organization_features (admin overrides), plan_tier_features (plan defaults)
+Integrations: integration_providers → organization_integrations (credentials + status per org)
+Phone: phone_assistants → phone_numbers → call_logs
+Calendar: calendar_integrations (Google OAuth per org)
 Admin: profiles.is_platform_admin, is_platform_admin() function
 
 ## RLS-Pattern (Standard)

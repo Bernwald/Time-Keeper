@@ -1,6 +1,8 @@
 // Google Calendar API helper for Edge Functions
 // Uses OAuth refresh token to get access tokens and interact with Calendar API
 
+import { getGoogleCredsForOrg } from "./integration-registry.ts";
+
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
@@ -43,25 +45,40 @@ export type CalendarEvent = {
 
 export async function refreshAccessToken(
   refreshToken: string,
+  orgId?: string,
 ): Promise<{ access_token: string; expires_at: Date } | null> {
   try {
+    // Use org-specific credentials if orgId provided, else global env vars
+    let clientId: string;
+    let clientSecret: string;
+    if (orgId) {
+      const creds = await getGoogleCredsForOrg(orgId);
+      clientId = creds.clientId;
+      clientSecret = creds.clientSecret;
+    } else {
+      clientId = getGoogleClientId();
+      clientSecret = getGoogleClientSecret();
+    }
+
     const response = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: getGoogleClientId(),
-        client_secret: getGoogleClientSecret(),
+        client_id: clientId,
+        client_secret: clientSecret,
         refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),
     });
 
     if (!response.ok) {
-      console.error("Google token refresh error:", response.status, await response.text());
+      const errText = await response.text();
+      console.error("[calendar] Token refresh error:", response.status, errText);
       return null;
     }
 
     const data = await response.json();
+    console.log("[calendar] Token refreshed, expires_in:", data.expires_in);
     const expiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
 
     return {
@@ -103,12 +120,20 @@ export async function listAvailableSlots(
   });
 
   if (!response.ok) {
-    console.error("Google FreeBusy error:", response.status, await response.text());
-    return [];
+    const errText = await response.text();
+    console.error("[calendar] FreeBusy error:", response.status, errText);
+    // Return special marker so caller can distinguish error from empty
+    return [{ start: "__ERROR__", end: `${response.status}: ${errText.slice(0, 200)}` }];
   }
 
   const data = await response.json();
-  const busyPeriods = data.calendars?.[calendarId]?.busy ?? [];
+  const calendarData = data.calendars?.[calendarId];
+  const busyPeriods = calendarData?.busy ?? [];
+  const errors = calendarData?.errors;
+  if (errors) {
+    console.error("[calendar] FreeBusy calendar errors:", JSON.stringify(errors));
+    return [{ start: "__ERROR__", end: JSON.stringify(errors).slice(0, 200) }];
+  }
 
   // Convert busy periods to minutes since start of working hours
   const workStart = timeToMinutes(settings.working_hours_start);

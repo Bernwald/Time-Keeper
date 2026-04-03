@@ -8,6 +8,7 @@ import {
   setOrgFeature,
   removeOrgFeatureOverride,
   inviteUserToOrg,
+  updateOrgPlan,
 } from "@/lib/db/queries/admin";
 import { createServiceClient } from "@/lib/db/supabase-server";
 
@@ -30,10 +31,10 @@ export async function createOrganization(formData: FormData) {
       name,
       slug,
       status: "active",
+      plan_id: "standard",
       metadata: {
         branding: { display_name: name, short_name: name.slice(0, 2).toUpperCase() },
         instance_type: "shared",
-        plan: "standard",
       },
     })
     .select("id")
@@ -50,7 +51,7 @@ export async function updateOrganization(id: string, formData: FormData) {
 
   const name = (formData.get("name") as string)?.trim();
   const status = (formData.get("status") as string)?.trim();
-  const plan = (formData.get("plan") as string)?.trim();
+  const planId = (formData.get("plan") as string)?.trim();
 
   if (!name) return;
 
@@ -66,8 +67,13 @@ export async function updateOrganization(id: string, formData: FormData) {
   await updateOrganizationAdmin(id, {
     name,
     status: status || "active",
-    metadata: { ...metadata, branding, plan: plan || "standard" },
+    metadata: { ...metadata, branding },
   });
+
+  // Update plan and sync features
+  if (planId) {
+    await updateOrgPlan(id, planId);
+  }
 
   revalidatePath(`/admin/kunden/${id}`);
   revalidatePath("/admin/kunden");

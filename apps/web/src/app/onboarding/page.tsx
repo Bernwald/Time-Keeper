@@ -48,10 +48,11 @@ export default function OnboardingPage() {
       return;
     }
 
-    const { error: rpcError } = await supabase.rpc("onboard_organization", {
+    const { error: rpcError } = await supabase.rpc("onboard_organization_v2", {
       p_user_id: user.id,
       p_org_name: trimmedName,
       p_org_slug: trimmedSlug,
+      p_plan_id: "standard",
     });
 
     if (rpcError) {

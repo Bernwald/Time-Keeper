@@ -5,14 +5,9 @@
 // 3. Sync configuration changes
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
+import { getVapiKeyForOrg } from "../_shared/integration-registry.ts";
 
 const VAPI_API_URL = "https://api.vapi.ai";
-
-function getVapiKey(): string {
-  const key = Deno.env.get("VAPI_API_KEY");
-  if (!key) throw new Error("VAPI_API_KEY not set");
-  return key;
-}
 
 function getServerUrl(): string {
   return Deno.env.get("VAPI_SERVER_URL") ?? "";
@@ -22,12 +17,17 @@ async function vapiRequest(
   path: string,
   method: string,
   body?: unknown,
+  orgId?: string,
 ): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   try {
+    const apiKey = orgId
+      ? await getVapiKeyForOrg(orgId)
+      : Deno.env.get("VAPI_API_KEY") ?? "";
+
     const response = await fetch(`${VAPI_API_URL}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${getVapiKey()}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -127,7 +127,7 @@ Deno.serve(async (req: Request) => {
         maxDurationSeconds: pa.max_call_duration_seconds,
         silenceTimeoutSeconds: 30,
         endCallMessage: "Vielen Dank fuer Ihren Anruf. Auf Wiedersehen!",
-      });
+      }, payload.org_id);
 
       if (!result.ok) {
         return errorResponse(`Vapi: ${result.error}`, 502);
@@ -177,6 +177,7 @@ Deno.serve(async (req: Request) => {
           firstMessage: pa.greeting_de,
           maxDurationSeconds: pa.max_call_duration_seconds,
         },
+        payload.org_id,
       );
 
       if (!result.ok) {
@@ -203,7 +204,7 @@ Deno.serve(async (req: Request) => {
         assistantId: pa.provider_assistant_id,
         provider: "twilio",
         numberDesiredAreaCode: payload.area_code ?? undefined,
-      });
+      }, payload.org_id);
 
       if (!result.ok) {
         return errorResponse(`Vapi: ${result.error}`, 502);
@@ -295,6 +296,7 @@ Deno.serve(async (req: Request) => {
             pa.language_mode === "en" ? pa.greeting_en : pa.greeting_de,
           maxDurationSeconds: pa.max_call_duration_seconds,
         },
+        payload.org_id,
       );
 
       return jsonResponse({ ok: result.ok, error: result.error });

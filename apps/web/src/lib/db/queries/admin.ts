@@ -5,6 +5,7 @@ export type AdminOrg = {
   slug: string;
   name: string;
   status: string;
+  plan_id: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -171,6 +172,134 @@ export async function removeOrgFeatureOverride(orgId: string, featureKey: string
     .eq("organization_id", orgId)
     .eq("feature_key", featureKey);
 }
+
+// ─── PLAN TIERS ──────────────────────────────────────────────────────────
+
+export type PlanTier = {
+  id: string;
+  name: string;
+  description: string | null;
+  limits: Record<string, number | null>;
+  instance_type: string;
+  sort_order: number;
+};
+
+export async function listPlanTiers(): Promise<PlanTier[]> {
+  const db = createServiceClient();
+  const { data } = await db
+    .from("plan_tiers")
+    .select("id, name, description, limits, instance_type, sort_order")
+    .eq("is_active", true)
+    .order("sort_order");
+  return (data ?? []) as PlanTier[];
+}
+
+export async function updateOrgPlan(orgId: string, planId: string) {
+  const db = createServiceClient();
+
+  // Update the plan
+  await db.from("organizations").update({ plan_id: planId }).eq("id", orgId);
+
+  // Sync organization_features: remove non-core overrides, then add plan features
+  const { data: planFeatures } = await db
+    .from("plan_tier_features")
+    .select("feature_key")
+    .eq("plan_id", planId);
+
+  const { data: coreFlags } = await db
+    .from("feature_flags")
+    .select("key")
+    .eq("is_core", true);
+
+  const coreKeys = new Set((coreFlags ?? []).map((f: any) => f.key));
+  const planKeys = new Set((planFeatures ?? []).map((f: any) => f.feature_key));
+
+  // Remove overrides for features not in new plan and not core
+  const { data: currentOverrides } = await db
+    .from("organization_features")
+    .select("feature_key")
+    .eq("organization_id", orgId);
+
+  for (const override of currentOverrides ?? []) {
+    if (!planKeys.has(override.feature_key) && !coreKeys.has(override.feature_key)) {
+      await db
+        .from("organization_features")
+        .delete()
+        .eq("organization_id", orgId)
+        .eq("feature_key", override.feature_key);
+    }
+  }
+
+  // Add overrides for non-core plan features
+  for (const key of planKeys) {
+    if (!coreKeys.has(key)) {
+      await db.from("organization_features").upsert(
+        { organization_id: orgId, feature_key: key, enabled: true },
+        { onConflict: "organization_id,feature_key" },
+      );
+    }
+  }
+}
+
+// ─── INTEGRATION REGISTRY ────────────────────────────────────────────────
+
+export type AdminOrgIntegration = {
+  id: string;
+  provider_id: string;
+  provider_name: string;
+  category: string;
+  status: string;
+  credential_mode: string;
+  error_message: string | null;
+  last_synced_at: string | null;
+};
+
+export async function getOrgIntegrations(orgId: string): Promise<AdminOrgIntegration[]> {
+  const db = createServiceClient();
+
+  const { data: integrations } = await db
+    .from("organization_integrations")
+    .select("id, provider_id, status, credential_mode, error_message, last_synced_at")
+    .eq("organization_id", orgId);
+
+  if (!integrations || integrations.length === 0) return [];
+
+  // Get provider names
+  const providerIds = integrations.map((i: any) => i.provider_id);
+  const { data: providers } = await db
+    .from("integration_providers")
+    .select("id, name, category")
+    .in("id", providerIds);
+
+  const providerMap = new Map<string, { name: string; category: string }>();
+  for (const p of providers ?? []) {
+    providerMap.set(p.id, { name: p.name, category: p.category });
+  }
+
+  return integrations.map((i: any) => ({
+    ...i,
+    provider_name: providerMap.get(i.provider_id)?.name ?? i.provider_id,
+    category: providerMap.get(i.provider_id)?.category ?? "unknown",
+  }));
+}
+
+export async function updateOrgIntegrationStatus(
+  integrationId: string,
+  status: string,
+  errorMessage?: string,
+) {
+  const db = createServiceClient();
+  await db
+    .from("organization_integrations")
+    .update({
+      status,
+      error_message: errorMessage ?? null,
+      last_synced_at: new Date().toISOString(),
+    })
+    .eq("id", integrationId);
+}
+
+// ─── EXISTING ────────────────────────────────────────────────────────────
 
 export async function inviteUserToOrg(orgId: string, email: string, role: string = "member") {
   const db = createServiceClient();
