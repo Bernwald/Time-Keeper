@@ -32,9 +32,13 @@ export async function verifyVapiSignature(
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    return computed === signature;
+    const match = computed === signature;
+    if (!match) {
+      console.error(`[vapi-verify] Signature mismatch. computed=${computed.slice(0, 12)}… received=${signature.slice(0, 12)}…`);
+    }
+    return match;
   } catch (err) {
-    console.error("Signature verification error:", err);
+    console.error("[vapi-verify] Signature verification error:", err);
     return false;
   }
 }

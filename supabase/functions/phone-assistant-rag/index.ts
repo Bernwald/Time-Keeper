@@ -175,8 +175,10 @@ Deno.serve(async (req: Request) => {
   // ─── TOOL CALLS (Vapi v2 format) ──────────────────────────────────
   if (messageType === "tool-calls") {
     const toolCalls = payload.message.toolCalls ?? [];
+    console.log(`[phone-rag] tool-calls: count=${toolCalls.length}, call.assistantId=${payload.message?.call?.assistantId ?? "MISSING"}, call.assistant.id=${payload.message?.call?.assistant?.id ?? "MISSING"}, message.assistant.id=${payload.message?.assistant?.id ?? "MISSING"}, phone=${payload.message?.call?.phoneNumber?.number ?? "MISSING"}, customer=${payload.message?.call?.customer?.number ?? "MISSING"}`);
     const results = [];
 
+    try {
     for (const toolCall of toolCalls) {
       if (toolCall.function.name === "search_knowledge") {
         let args: Record<string, string>;
@@ -323,6 +325,15 @@ Deno.serve(async (req: Request) => {
         });
       }
     }
+    } catch (err) {
+      console.error("[phone-rag] Unhandled error in tool-calls:", err);
+      return jsonResponse({
+        results: toolCalls.map((tc) => ({
+          toolCallId: tc.id,
+          result: "Ein interner Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+        })),
+      });
+    }
 
     return jsonResponse({ results });
   }
@@ -444,29 +455,33 @@ async function resolveAssistantConfig(
     ?? message.assistant?.id
     ?? "";
 
+  console.log(`[resolveAssistantConfig] calledNumber="${calledNumber}", providerAssistantId="${providerAssistantId}"`);
+
   // Try phone number first
   if (calledNumber) {
-    const { data } = await db.rpc("get_org_for_phone_number", {
+    const { data, error } = await db.rpc("get_org_for_phone_number", {
       p_phone_number: calledNumber,
     });
+    if (error) console.error("[resolveAssistantConfig] get_org_for_phone_number error:", error);
     if (data && data.length > 0) {
-      console.log("Resolved org via phone number:", calledNumber);
+      console.log("[resolveAssistantConfig] Resolved org via phone number:", calledNumber);
       return data[0];
     }
   }
 
   // Fallback: resolve via provider_assistant_id (Vapi Talk button, browser calls)
   if (providerAssistantId) {
-    const { data } = await db.rpc("get_org_for_provider_assistant", {
+    const { data, error } = await db.rpc("get_org_for_provider_assistant", {
       p_provider_assistant_id: providerAssistantId,
     });
+    if (error) console.error("[resolveAssistantConfig] get_org_for_provider_assistant error:", error);
     if (data && data.length > 0) {
-      console.log("Resolved org via provider_assistant_id:", providerAssistantId);
+      console.log("[resolveAssistantConfig] Resolved org via provider_assistant_id:", providerAssistantId);
       return data[0];
     }
   }
 
-  console.error("Could not resolve org. calledNumber:", calledNumber, "assistantId:", providerAssistantId);
+  console.error("[resolveAssistantConfig] FAILED. calledNumber:", calledNumber, "assistantId:", providerAssistantId);
   return null;
 }
 

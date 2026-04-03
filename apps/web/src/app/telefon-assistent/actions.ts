@@ -153,12 +153,20 @@ export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: s
   const serverUrl = process.env.VAPI_SERVER_URL
     ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/phone-assistant-rag`;
 
-  // Tools at assistant level (NOT model level) with server.url
-  // so Vapi routes tool-calls back to our serverUrl as webhooks
-  const serverTools = buildAssistantTools().map((t) => ({
+  // Check if calendar integration is active for this org
+  const hasCalendar = await hasActiveCalendarIntegration(orgId);
+
+  // Tools with server.url so Vapi routes tool-calls back as webhooks
+  const serverTools = buildAssistantTools(hasCalendar).map((t) => ({
     ...t,
     server: { url: serverUrl },
   }));
+
+  // Extend system prompt with calendar instructions if active
+  let systemPrompt = pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent.";
+  if (hasCalendar) {
+    systemPrompt += CALENDAR_PROMPT_EXTENSION;
+  }
 
   const result = await vapiRequest("/assistant", "POST", {
     name: `${pa.name} (${orgId.slice(0, 8)})`,
@@ -167,7 +175,7 @@ export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: s
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
-      messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
+      messages: [{ role: "system", content: systemPrompt }],
       tools: serverTools,
     },
     voice: { provider: "openai", voiceId: pa.voice_id_de ?? "alloy" },
@@ -219,17 +227,26 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
   const serverUrl = process.env.VAPI_SERVER_URL
     ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/phone-assistant-rag`;
 
-  // Tools at assistant level with server.url for webhook routing
-  const serverTools = buildAssistantTools().map((t) => ({
+  // Check if calendar integration is active for this org
+  const hasCalendar = await hasActiveCalendarIntegration(orgId);
+
+  // Tools with server.url for webhook routing
+  const serverTools = buildAssistantTools(hasCalendar).map((t) => ({
     ...t,
     server: { url: serverUrl },
   }));
+
+  // Extend system prompt with calendar instructions if active
+  let systemPrompt = pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent.";
+  if (hasCalendar) {
+    systemPrompt += CALENDAR_PROMPT_EXTENSION;
+  }
 
   const result = await vapiRequest(`/assistant/${pa.provider_assistant_id}`, "PATCH", {
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
-      messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
+      messages: [{ role: "system", content: systemPrompt }],
       tools: serverTools,
     },
     voice: {
@@ -252,8 +269,8 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
 
 // ─── TOOL DEFINITIONS ──────────────────────────────────────────────────────
 
-function buildAssistantTools() {
-  return [
+function buildAssistantTools(includeCalendar = false) {
+  const tools = [
     {
       type: "function",
       function: {
@@ -292,7 +309,63 @@ function buildAssistantTools() {
       },
     },
   ];
+
+  if (includeCalendar) {
+    tools.push(
+      {
+        type: "function",
+        function: {
+          name: "check_available_slots",
+          description: "Check available appointment slots for a specific date. Use when a caller wants to schedule a meeting or appointment.",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "The date to check in YYYY-MM-DD format" },
+              duration_minutes: { type: "string", description: "Desired appointment duration in minutes (default: 30)" },
+            },
+            required: ["date"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "schedule_appointment",
+          description: "Create a new appointment in the calendar. Use after checking available slots and confirming with the caller.",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Appointment date in YYYY-MM-DD format" },
+              time: { type: "string", description: "Start time in HH:MM format" },
+              duration_minutes: { type: "string", description: "Duration in minutes (default: 30)" },
+              title: { type: "string", description: "Appointment title/subject" },
+              attendee_name: { type: "string", description: "Name of the attendee" },
+              attendee_email: { type: "string", description: "Email of the attendee for calendar invitation" },
+            },
+            required: ["date", "time", "title"],
+          },
+        },
+      },
+    );
+  }
+
+  return tools;
 }
+
+async function hasActiveCalendarIntegration(orgId: string): Promise<boolean> {
+  const db = createServiceClient();
+  const { data } = await db
+    .from("calendar_integrations")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("status", "active")
+    .not("refresh_token", "is", null)
+    .limit(1)
+    .single();
+  return !!data;
+}
+
+const CALENDAR_PROMPT_EXTENSION = "\n\nDu kannst Termine vereinbaren. Nutze check_available_slots um freie Zeiten zu pruefen und schedule_appointment um einen Termin zu erstellen. Frage den Anrufer nach gewuenschtem Datum, Uhrzeit und Dauer bevor du einen Termin erstellst.";
 
 // ─── PHONE NUMBERS ─────────────────────────────────────────────────────────
 
@@ -364,6 +437,11 @@ export async function disconnectCalendar() {
       token_expires_at: null,
     })
     .eq("organization_id", orgId);
+
+  // Auto-sync Vapi assistant to remove calendar tools
+  await syncVapiConfig().catch((e) =>
+    console.error("Auto-sync after calendar disconnect failed:", e),
+  );
 
   revalidatePath("/telefon-assistent/kalender");
   revalidatePath("/telefon-assistent/einstellungen");
@@ -454,6 +532,11 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
         status: "active",
       });
     }
+
+    // Auto-sync Vapi assistant to include calendar tools
+    await syncVapiConfig().catch((e) =>
+      console.error("Auto-sync after calendar connect failed:", e),
+    );
 
     return { ok: true };
   } catch (err) {
