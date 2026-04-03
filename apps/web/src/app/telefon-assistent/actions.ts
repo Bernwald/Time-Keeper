@@ -439,8 +439,6 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
       });
     }
 
-    revalidatePath("/telefon-assistent/kalender");
-    revalidatePath("/telefon-assistent/einstellungen");
     return { ok: true };
   } catch (err) {
     console.error("Google OAuth exchange error:", err);
