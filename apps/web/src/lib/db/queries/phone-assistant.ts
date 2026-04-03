@@ -75,6 +75,24 @@ export type CallStats = {
   total_cost_cents: number;
 };
 
+export type CalendarIntegration = {
+  id: string;
+  organization_id: string;
+  provider: string;
+  calendar_id: string;
+  refresh_token: string | null;
+  settings: {
+    default_duration_minutes: number;
+    buffer_minutes: number;
+    working_hours_start: string;
+    working_hours_end: string;
+    timezone: string;
+  };
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // Re-export constants
 export {
   VOICE_OPTIONS,
@@ -134,6 +152,20 @@ export async function getCallLogById(id: string): Promise<CallLog | null> {
     .from("call_logs")
     .select("*")
     .eq("id", id)
+    .eq("organization_id", orgId)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+// ─── CALENDAR INTEGRATION ─────────────────────────────────────────────
+
+export async function getCalendarIntegration(): Promise<CalendarIntegration | null> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { data, error } = await db
+    .from("calendar_integrations")
+    .select("*")
     .eq("organization_id", orgId)
     .single();
   if (error) return null;

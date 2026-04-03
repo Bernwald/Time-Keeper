@@ -117,22 +117,7 @@ Deno.serve(async (req: Request) => {
           provider: "anthropic",
           model: "claude-sonnet-4-6",
           messages: [{ role: "system", content: pa.system_prompt }],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "search_knowledge",
-                description: "Search the company knowledge base",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    query: { type: "string", description: "Search query" },
-                  },
-                  required: ["query"],
-                },
-              },
-            },
-          ],
+          tools: buildAssistantTools(),
         },
         voice: {
           provider: "openai",
@@ -183,6 +168,7 @@ Deno.serve(async (req: Request) => {
             provider: "anthropic",
             model: "claude-sonnet-4-6",
             messages: [{ role: "system", content: pa.system_prompt }],
+            tools: buildAssistantTools(),
           },
           voice: {
             provider: "openai",
@@ -296,7 +282,10 @@ Deno.serve(async (req: Request) => {
         "PATCH",
         {
           model: {
+            provider: "anthropic",
+            model: "claude-sonnet-4-6",
             messages: [{ role: "system", content: pa.system_prompt }],
+            tools: buildAssistantTools(),
           },
           voice: {
             provider: "openai",
@@ -315,3 +304,47 @@ Deno.serve(async (req: Request) => {
       return errorResponse("Unknown action", 400);
   }
 });
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+
+function buildAssistantTools() {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "search_knowledge",
+        description:
+          "Search the knowledge base including past conversations, call transcripts, meeting notes, and all company information. Use this for ANY question about past interactions, contacts, or factual information.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The search query" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "search_knowledge_for_contact",
+        description:
+          "Search the knowledge base for information about a specific contact person, including past conversations and linked documents. Use when the caller asks about a specific person by name.",
+        parameters: {
+          type: "object",
+          properties: {
+            contact_name: {
+              type: "string",
+              description: "The name of the contact person to search for",
+            },
+            query: {
+              type: "string",
+              description: "Optional additional search query to refine results",
+            },
+          },
+          required: ["contact_name"],
+        },
+      },
+    },
+  ];
+}

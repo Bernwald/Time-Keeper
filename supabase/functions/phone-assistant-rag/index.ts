@@ -10,6 +10,12 @@
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
 import { embedText } from "../_shared/embeddings.ts";
 import { verifyVapiSignature } from "../_shared/vapi-verify.ts";
+import {
+  refreshAccessToken,
+  listAvailableSlots,
+  createCalendarEvent,
+  type CalendarSettings,
+} from "../_shared/google-calendar.ts";
 
 // Vapi Server URL message types
 type VapiMessage = {
@@ -119,7 +125,19 @@ Deno.serve(async (req: Request) => {
         ? assistant.greeting_en
         : assistant.greeting_de;
 
-    // Return assistant config with RAG tool
+    // Check if calendar integration is active for this org
+    const calendarConfig = await getCalendarConfig(assistant.org_id);
+
+    // Build tools list (RAG + optional calendar)
+    const tools = buildAssistantTools(!!calendarConfig);
+
+    // Extend system prompt with calendar instructions if active
+    let systemPrompt = assistant.system_prompt;
+    if (calendarConfig) {
+      systemPrompt += "\n\nDu kannst Termine vereinbaren. Nutze check_available_slots um freie Zeiten zu pruefen und schedule_appointment um einen Termin zu erstellen. Frage den Anrufer nach gewuenschtem Datum, Uhrzeit und Dauer bevor du einen Termin erstellst.";
+    }
+
+    // Return assistant config with tools
     return jsonResponse({
       assistant: {
         firstMessage: greeting,
@@ -129,29 +147,10 @@ Deno.serve(async (req: Request) => {
           messages: [
             {
               role: "system",
-              content: assistant.system_prompt,
+              content: systemPrompt,
             },
           ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "search_knowledge",
-                description:
-                  "Search the company knowledge base to answer customer questions. Use this for any factual question.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    query: {
-                      type: "string",
-                      description: "The search query based on the customer's question",
-                    },
-                  },
-                  required: ["query"],
-                },
-              },
-            },
-          ],
+          tools,
         },
         voice: {
           provider: "openai",
@@ -205,8 +204,60 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        // Auto-boost sources linked to caller's contact
+        const callerNumber = payload.message.call?.customer?.number ?? "";
+        const boostSourceIds = await getCallerBoostSourceIds(
+          assistant.org_id,
+          callerNumber,
+        );
+
         const context = await searchKnowledge(
           assistant.org_id,
+          query,
+          assistant.max_chunks ?? 5,
+          assistant.boost_factor ?? 1.5,
+          boostSourceIds,
+        );
+
+        results.push({
+          toolCallId: toolCall.id,
+          result: context || "Keine relevanten Informationen gefunden.",
+        });
+      } else if (toolCall.function.name === "search_knowledge_for_contact") {
+        let args: Record<string, string>;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          results.push({
+            toolCallId: toolCall.id,
+            result: "Fehler beim Parsen der Anfrage.",
+          });
+          continue;
+        }
+
+        const contactName = args.contact_name ?? "";
+        const query = args.query ?? contactName;
+
+        if (!contactName.trim()) {
+          results.push({
+            toolCallId: toolCall.id,
+            result: "Kein Kontaktname angegeben.",
+          });
+          continue;
+        }
+
+        const assistant = await resolveAssistantConfig(payload.message);
+        if (!assistant) {
+          results.push({
+            toolCallId: toolCall.id,
+            result: "Kein Assistent konfiguriert.",
+          });
+          continue;
+        }
+
+        const context = await searchKnowledgeForContact(
+          assistant.org_id,
+          contactName,
           query,
           assistant.max_chunks ?? 5,
           assistant.boost_factor ?? 1.5,
@@ -214,8 +265,51 @@ Deno.serve(async (req: Request) => {
 
         results.push({
           toolCallId: toolCall.id,
-          result: context || "Keine relevanten Informationen gefunden.",
+          result: context || `Keine Informationen zu "${contactName}" gefunden.`,
         });
+      } else if (toolCall.function.name === "check_available_slots") {
+        let args: Record<string, string>;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          results.push({ toolCallId: toolCall.id, result: "Fehler beim Parsen der Anfrage." });
+          continue;
+        }
+
+        const assistant = await resolveAssistantConfig(payload.message);
+        if (!assistant) {
+          results.push({ toolCallId: toolCall.id, result: "Kein Assistent konfiguriert." });
+          continue;
+        }
+
+        const result = await handleCheckAvailableSlots(
+          assistant.org_id,
+          args.date,
+          args.duration_minutes ? parseInt(args.duration_minutes) : undefined,
+        );
+        results.push({ toolCallId: toolCall.id, result });
+
+      } else if (toolCall.function.name === "schedule_appointment") {
+        let args: Record<string, string>;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          results.push({ toolCallId: toolCall.id, result: "Fehler beim Parsen der Anfrage." });
+          continue;
+        }
+
+        const assistant = await resolveAssistantConfig(payload.message);
+        if (!assistant) {
+          results.push({ toolCallId: toolCall.id, result: "Kein Assistent konfiguriert." });
+          continue;
+        }
+
+        const result = await handleScheduleAppointment(
+          assistant.org_id,
+          args,
+        );
+        results.push({ toolCallId: toolCall.id, result });
+
       } else {
         results.push({
           toolCallId: toolCall.id,
@@ -230,31 +324,76 @@ Deno.serve(async (req: Request) => {
   // ─── FUNCTION CALL (Vapi v1 format, fallback) ────────────────────
   if (messageType === "function-call") {
     const fn = payload.message.functionCall;
-    if (!fn || fn.name !== "search_knowledge") {
+    if (!fn) {
       return jsonResponse({ result: "Unbekannte Funktion." });
     }
 
-    const query = fn.parameters?.query ?? "";
-    if (!query.trim()) {
-      return jsonResponse({ result: "Keine Suchanfrage angegeben." });
-    }
-
     const assistant = await resolveAssistantConfig(payload.message);
-
     if (!assistant) {
       return jsonResponse({ result: "Kein Assistent konfiguriert." });
     }
 
-    const context = await searchKnowledge(
-      assistant.org_id,
-      query,
-      assistant.max_chunks ?? 5,
-      assistant.boost_factor ?? 1.5,
-    );
+    if (fn.name === "search_knowledge") {
+      const query = fn.parameters?.query ?? "";
+      if (!query.trim()) {
+        return jsonResponse({ result: "Keine Suchanfrage angegeben." });
+      }
 
-    return jsonResponse({
-      result: context || "Keine relevanten Informationen gefunden.",
-    });
+      const callerNumber = payload.message.call?.customer?.number ?? "";
+      const boostSourceIds = await getCallerBoostSourceIds(
+        assistant.org_id,
+        callerNumber,
+      );
+
+      const context = await searchKnowledge(
+        assistant.org_id,
+        query,
+        assistant.max_chunks ?? 5,
+        assistant.boost_factor ?? 1.5,
+        boostSourceIds,
+      );
+
+      return jsonResponse({
+        result: context || "Keine relevanten Informationen gefunden.",
+      });
+    }
+
+    if (fn.name === "search_knowledge_for_contact") {
+      const contactName = fn.parameters?.contact_name ?? "";
+      const query = fn.parameters?.query ?? contactName;
+
+      if (!contactName.trim()) {
+        return jsonResponse({ result: "Kein Kontaktname angegeben." });
+      }
+
+      const context = await searchKnowledgeForContact(
+        assistant.org_id,
+        contactName,
+        query,
+        assistant.max_chunks ?? 5,
+        assistant.boost_factor ?? 1.5,
+      );
+
+      return jsonResponse({
+        result: context || `Keine Informationen zu "${contactName}" gefunden.`,
+      });
+    }
+
+    if (fn.name === "check_available_slots") {
+      const result = await handleCheckAvailableSlots(
+        assistant.org_id,
+        fn.parameters?.date,
+        fn.parameters?.duration_minutes ? parseInt(fn.parameters.duration_minutes) : undefined,
+      );
+      return jsonResponse({ result });
+    }
+
+    if (fn.name === "schedule_appointment") {
+      const result = await handleScheduleAppointment(assistant.org_id, fn.parameters ?? {});
+      return jsonResponse({ result });
+    }
+
+    return jsonResponse({ result: "Unbekannte Funktion." });
   }
 
   // ─── OTHER MESSAGE TYPES ──────────────────────────────────────────
@@ -330,6 +469,7 @@ async function searchKnowledge(
   query: string,
   maxChunks: number,
   boostFactor: number,
+  boostSourceIds: string[] = [],
 ): Promise<string> {
   const db = getServiceClient();
 
@@ -344,7 +484,7 @@ async function searchKnowledge(
       p_org_id: orgId,
       p_query: query,
       p_embedding: JSON.stringify(embedding),
-      p_boost_source_ids: [],
+      p_boost_source_ids: boostSourceIds,
       p_boost_factor: boostFactor,
       p_limit: maxChunks,
     });
@@ -385,6 +525,308 @@ async function searchKnowledge(
     )
     .join("\n\n---\n\n");
 }
+
+async function searchKnowledgeForContact(
+  orgId: string,
+  contactName: string,
+  query: string,
+  maxChunks: number,
+  boostFactor: number,
+): Promise<string> {
+  const db = getServiceClient();
+
+  // Find contact by name
+  const { data: contacts } = await db.rpc("search_contact_by_name", {
+    p_org_id: orgId,
+    p_name: contactName,
+  });
+
+  let boostSourceIds: string[] = [];
+  let contactInfo = "";
+
+  if (contacts && contacts.length > 0) {
+    const contact = contacts[0];
+    contactInfo = `Kontakt: ${contact.first_name} ${contact.last_name}`;
+    if (contact.company_name) contactInfo += ` (${contact.company_name})`;
+    if (contact.email) contactInfo += `, E-Mail: ${contact.email}`;
+    if (contact.phone) contactInfo += `, Tel: ${contact.phone}`;
+
+    // Get source IDs linked to this contact for boosting
+    const { data: sourceIds } = await db.rpc("get_boosted_source_ids_for_contact", {
+      p_org_id: orgId,
+      p_contact_id: contact.id,
+    });
+    boostSourceIds = sourceIds ?? [];
+  }
+
+  // Search with contact-boosted sources
+  const searchResult = await searchKnowledge(
+    orgId,
+    query,
+    maxChunks,
+    boostFactor,
+    boostSourceIds,
+  );
+
+  // Prepend contact info if found
+  if (contactInfo && searchResult) {
+    return `${contactInfo}\n\n---\n\n${searchResult}`;
+  }
+  if (contactInfo) {
+    return contactInfo;
+  }
+  return searchResult;
+}
+
+async function getCallerBoostSourceIds(
+  orgId: string,
+  callerNumber: string,
+): Promise<string[]> {
+  if (!callerNumber) return [];
+
+  const db = getServiceClient();
+
+  // Match caller to contact
+  const { data: contactId } = await db.rpc("match_caller_to_contact", {
+    p_org_id: orgId,
+    p_caller_number: callerNumber,
+  });
+
+  if (!contactId) return [];
+
+  // Get boost source IDs for this contact
+  const { data: sourceIds } = await db.rpc("get_boosted_source_ids_for_contact", {
+    p_org_id: orgId,
+    p_contact_id: contactId,
+  });
+
+  return sourceIds ?? [];
+}
+
+// ─── TOOL DEFINITIONS ────────────────────────────────────────────────────
+
+function buildAssistantTools(includeCalendar: boolean) {
+  const tools = [
+    {
+      type: "function",
+      function: {
+        name: "search_knowledge",
+        description:
+          "Search the knowledge base including past conversations, call transcripts, meeting notes, and all company information. Use this for ANY question about past interactions, contacts, or factual information.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The search query based on the customer's question" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "search_knowledge_for_contact",
+        description:
+          "Search the knowledge base for information about a specific contact person, including past conversations and linked documents. Use when the caller asks about a specific person by name.",
+        parameters: {
+          type: "object",
+          properties: {
+            contact_name: { type: "string", description: "The name of the contact person to search for" },
+            query: { type: "string", description: "Optional additional search query to refine results" },
+          },
+          required: ["contact_name"],
+        },
+      },
+    },
+  ];
+
+  if (includeCalendar) {
+    tools.push(
+      {
+        type: "function",
+        function: {
+          name: "check_available_slots",
+          description: "Check available appointment slots for a specific date. Use when a caller wants to schedule a meeting or appointment.",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "The date to check in YYYY-MM-DD format" },
+              duration_minutes: { type: "string", description: "Desired appointment duration in minutes (default: 30)" },
+            },
+            required: ["date"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "schedule_appointment",
+          description: "Create a new appointment in the calendar. Use after checking available slots and confirming with the caller.",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Appointment date in YYYY-MM-DD format" },
+              time: { type: "string", description: "Start time in HH:MM format" },
+              duration_minutes: { type: "string", description: "Duration in minutes (default: 30)" },
+              title: { type: "string", description: "Appointment title/subject" },
+              attendee_name: { type: "string", description: "Name of the attendee" },
+              attendee_email: { type: "string", description: "Email of the attendee for calendar invitation" },
+            },
+            required: ["date", "time", "title"],
+          },
+        },
+      },
+    );
+  }
+
+  return tools;
+}
+
+// ─── CALENDAR HELPERS ────────────────────────────────────────────────────
+
+type CalendarConfig = {
+  calendar_id: string;
+  refresh_token: string;
+  access_token: string | null;
+  token_expires_at: string | null;
+  settings: CalendarSettings;
+  status: string;
+};
+
+async function getCalendarConfig(orgId: string): Promise<CalendarConfig | null> {
+  const db = getServiceClient();
+  const { data } = await db.rpc("get_calendar_integration_for_org", {
+    p_org_id: orgId,
+  });
+
+  if (!data || data.length === 0) return null;
+  const row = data[0];
+  if (!row.refresh_token) return null;
+  return row as CalendarConfig;
+}
+
+async function getCalendarAccessToken(
+  orgId: string,
+  config: CalendarConfig,
+): Promise<string | null> {
+  // Check if existing token is still valid (with 2 min buffer)
+  if (config.access_token && config.token_expires_at) {
+    const expiresAt = new Date(config.token_expires_at);
+    if (expiresAt.getTime() > Date.now() + 120_000) {
+      return config.access_token;
+    }
+  }
+
+  // Refresh the token
+  const result = await refreshAccessToken(config.refresh_token);
+  if (!result) return null;
+
+  // Store the new token in DB
+  const db = getServiceClient();
+  await db.rpc("update_calendar_token", {
+    p_org_id: orgId,
+    p_access_token: result.access_token,
+    p_expires_at: result.expires_at.toISOString(),
+  });
+
+  return result.access_token;
+}
+
+async function handleCheckAvailableSlots(
+  orgId: string,
+  date?: string,
+  durationMinutes?: number,
+): Promise<string> {
+  const config = await getCalendarConfig(orgId);
+  if (!config) return "Kalender-Integration ist nicht eingerichtet.";
+
+  const accessToken = await getCalendarAccessToken(orgId, config);
+  if (!accessToken) return "Kalender-Zugriff fehlgeschlagen. Bitte spaeter erneut versuchen.";
+
+  const settings = config.settings;
+  const duration = durationMinutes || settings.default_duration_minutes || 30;
+
+  // Default to tomorrow if no date given or invalid
+  let targetDate = date;
+  if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    targetDate = tomorrow.toISOString().slice(0, 10);
+  }
+
+  const slots = await listAvailableSlots(
+    accessToken,
+    config.calendar_id,
+    targetDate,
+    duration,
+    settings,
+  );
+
+  if (slots.length === 0) {
+    return `Am ${formatDateDE(targetDate)} sind leider keine freien Termine (${duration} Minuten) verfuegbar.`;
+  }
+
+  const slotList = slots
+    .slice(0, 8) // Limit to 8 slots for voice readability
+    .map((s) => `${s.start} bis ${s.end}`)
+    .join(", ");
+
+  return `Am ${formatDateDE(targetDate)} sind folgende Zeiten fuer einen ${duration}-Minuten-Termin verfuegbar: ${slotList}.`;
+}
+
+async function handleScheduleAppointment(
+  orgId: string,
+  params: Record<string, string>,
+): Promise<string> {
+  const config = await getCalendarConfig(orgId);
+  if (!config) return "Kalender-Integration ist nicht eingerichtet.";
+
+  const date = params.date;
+  const time = params.time;
+  const title = params.title;
+
+  if (!date || !time || !title) {
+    return "Bitte Datum (YYYY-MM-DD), Uhrzeit (HH:MM) und Betreff angeben.";
+  }
+
+  const accessToken = await getCalendarAccessToken(orgId, config);
+  if (!accessToken) return "Kalender-Zugriff fehlgeschlagen. Bitte spaeter erneut versuchen.";
+
+  const settings = config.settings;
+  const duration = params.duration_minutes ? parseInt(params.duration_minutes) : (settings.default_duration_minutes || 30);
+
+  const result = await createCalendarEvent(
+    accessToken,
+    config.calendar_id,
+    {
+      summary: title,
+      date,
+      startTime: time,
+      durationMinutes: duration,
+      attendeeName: params.attendee_name,
+      attendeeEmail: params.attendee_email,
+      description: `Termin vereinbart per Telefonassistent`,
+    },
+    settings.timezone || "Europe/Berlin",
+  );
+
+  if (!result.ok) {
+    return `Termin konnte nicht erstellt werden: ${result.error}`;
+  }
+
+  return `Termin "${title}" am ${formatDateDE(date)} um ${time} Uhr (${duration} Min.) wurde erfolgreich erstellt.`;
+}
+
+function formatDateDE(dateStr: string): string {
+  try {
+    const [y, m, d] = dateStr.split("-");
+    return `${d}.${m}.${y}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+// ─── BUSINESS HOURS ──────────────────────────────────────────────────────
 
 async function checkBusinessHours(
   start: string,

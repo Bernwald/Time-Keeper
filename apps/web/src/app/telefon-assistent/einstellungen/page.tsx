@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAssistant } from "@/lib/db/queries/phone-assistant";
+import { getAssistant, getCalendarIntegration } from "@/lib/db/queries/phone-assistant";
 import { VOICE_OPTIONS, LANGUAGE_MODES } from "@/lib/constants/phone-assistant";
 import { createOrUpdateAssistant, toggleAssistantStatus, provisionVapiAssistant, syncVapiConfig } from "../actions";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
@@ -8,6 +8,8 @@ import { VapiActionButton } from "@/components/phone/vapi-action-button";
 
 export default async function AssistantSettingsPage() {
   const assistant = await getAssistant();
+  const calendar = await getCalendarIntegration();
+  const isCalendarConnected = calendar?.status === "active" && !!calendar?.refresh_token;
 
   return (
     <div className={page.narrow}>
@@ -333,6 +335,40 @@ export default async function AssistantSettingsPage() {
           )}
         </div>
       )}
+
+      {/* Calendar Integration */}
+      <div className={`${card.base} flex flex-col gap-4 animate-slide-up`} style={styles.panel}>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+          Kalender-Integration
+        </h2>
+
+        <div className="flex items-center gap-2">
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ background: isCalendarConnected ? "var(--color-success)" : "var(--color-muted)" }}
+          />
+          <span
+            className="text-xs font-medium"
+            style={{ color: isCalendarConnected ? "var(--color-success)" : "var(--color-muted)" }}
+          >
+            {isCalendarConnected ? "Google Kalender verbunden" : "Nicht verbunden"}
+          </span>
+        </div>
+
+        <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+          {isCalendarConnected
+            ? "Anrufer koennen ueber den Telefonassistenten Termine vereinbaren."
+            : "Verbinde deinen Google Kalender, damit Anrufer Termine vereinbaren koennen."}
+        </p>
+
+        <Link
+          href="/telefon-assistent/kalender"
+          className={btn.secondary}
+          style={styles.accentSoft}
+        >
+          {isCalendarConnected ? "Kalender verwalten" : "Kalender verbinden"}
+        </Link>
+      </div>
     </div>
   );
 }
