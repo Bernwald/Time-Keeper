@@ -142,8 +142,8 @@ Deno.serve(async (req: Request) => {
       systemPrompt += "\n\nDu kannst Termine vereinbaren. Nutze check_available_slots um freie Zeiten zu pruefen und schedule_appointment um einen Termin zu erstellen. Frage den Anrufer nach gewuenschtem Datum, Uhrzeit und Dauer bevor du einen Termin erstellst.";
     }
 
-    // Return assistant config — tools at assistant level (NOT model level)
-    // so Vapi routes tool-calls back to our serverUrl as webhooks
+    // Return assistant config — tools in model.tools with server.url
+    // so Vapi routes tool-calls back to our edge function as webhooks
     return jsonResponse({
       assistant: {
         firstMessage: greeting,
@@ -156,8 +156,8 @@ Deno.serve(async (req: Request) => {
               content: systemPrompt,
             },
           ],
+          tools: serverTools,
         },
-        tools: serverTools,
         voice: {
           provider: "openai",
           voiceId:
