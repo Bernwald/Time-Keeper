@@ -269,8 +269,9 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
 
 // ─── TOOL DEFINITIONS ──────────────────────────────────────────────────────
 
-function buildAssistantTools(includeCalendar = false) {
-  const tools = [
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildAssistantTools(includeCalendar = false): Array<Record<string, any>> {
+  const tools: Array<Record<string, any>> = [
     {
       type: "function",
       function: {
