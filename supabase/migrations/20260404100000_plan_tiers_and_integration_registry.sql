@@ -75,7 +75,7 @@ INSERT INTO public.plan_tier_features (plan_id, feature_key) VALUES
   ('standard', 'api_access')
 ON CONFLICT DO NOTHING;
 
--- Premium: standard + phone_assistant + custom_branding
+-- Premium: standard + phone_assistant + custom_branding + process_management + voice_recording
 INSERT INTO public.plan_tier_features (plan_id, feature_key) VALUES
   ('premium', 'sources'),
   ('premium', 'search'),
@@ -86,7 +86,9 @@ INSERT INTO public.plan_tier_features (plan_id, feature_key) VALUES
   ('premium', 'csv_import'),
   ('premium', 'api_access'),
   ('premium', 'phone_assistant'),
-  ('premium', 'custom_branding')
+  ('premium', 'custom_branding'),
+  ('premium', 'process_management'),
+  ('premium', 'voice_recording')
 ON CONFLICT DO NOTHING;
 
 -- Enterprise: all features
@@ -100,7 +102,9 @@ INSERT INTO public.plan_tier_features (plan_id, feature_key) VALUES
   ('enterprise', 'csv_import'),
   ('enterprise', 'api_access'),
   ('enterprise', 'phone_assistant'),
-  ('enterprise', 'custom_branding')
+  ('enterprise', 'custom_branding'),
+  ('enterprise', 'process_management'),
+  ('enterprise', 'voice_recording')
 ON CONFLICT DO NOTHING;
 
 -- ─── INTEGRATION PROVIDERS ──────────────────────────────────────────────

@@ -107,12 +107,19 @@ export async function getOrganizationAdmin(id: string): Promise<AdminOrgDetail |
     .eq("organization_id", id)
     .order("created_at");
 
-  // Fetch all feature flags + org overrides
+  // Fetch all feature flags + org overrides + plan features
   const { data: flags } = await db.from("feature_flags").select("*").order("key");
   const { data: overrides } = await db
     .from("organization_features")
     .select("*")
     .eq("organization_id", id);
+
+  // Get plan-based feature keys
+  const planId = org.plan_id ?? "standard";
+  const { data: planFeatures } = await db
+    .from("plan_tier_features")
+    .select("feature_key")
+    .eq("plan_id", planId);
 
   const overrideMap = new Map<string, boolean>();
   if (overrides) {
@@ -121,13 +128,17 @@ export async function getOrganizationAdmin(id: string): Promise<AdminOrgDetail |
     }
   }
 
+  const planFeatureSet = new Set((planFeatures ?? []).map((pf: any) => pf.feature_key));
+
   const features: AdminOrgFeature[] = (flags ?? []).map((f: any) => ({
     feature_key: f.key,
     name: f.name,
     description: f.description,
     is_core: f.is_core,
     has_override: overrideMap.has(f.key),
-    enabled: overrideMap.has(f.key) ? overrideMap.get(f.key)! : f.is_core,
+    enabled: overrideMap.has(f.key)
+      ? overrideMap.get(f.key)!
+      : planFeatureSet.has(f.key) || f.is_core,
   }));
 
   // Count members
