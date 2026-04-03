@@ -377,7 +377,7 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
   const redirectUri = `${appUrl}/telefon-assistent/kalender/callback`;
 
   if (!clientId || !clientSecret) {
-    return { ok: false, error: "Google OAuth ist nicht konfiguriert." };
+    return { ok: false, error: `Google OAuth nicht konfiguriert. Client ID: ${clientId ? "gesetzt" : "FEHLT"}, Client Secret: ${clientSecret ? "gesetzt" : "FEHLT"}` };
   }
 
   try {
@@ -395,8 +395,8 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Google OAuth token exchange error:", errText);
-      return { ok: false, error: "Token-Austausch fehlgeschlagen." };
+      console.error("Google OAuth token exchange error:", response.status, errText);
+      return { ok: false, error: `Token-Austausch fehlgeschlagen (${response.status}): ${errText.slice(0, 200)}` };
     }
 
     const data = await response.json();
@@ -444,7 +444,8 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
     return { ok: true };
   } catch (err) {
     console.error("Google OAuth exchange error:", err);
-    return { ok: false, error: "Unbekannter Fehler beim Token-Austausch." };
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Fehler beim Token-Austausch: ${msg}` };
   }
 }
 
