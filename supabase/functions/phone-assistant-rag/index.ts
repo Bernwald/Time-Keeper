@@ -81,6 +81,15 @@ Deno.serve(async (req: Request) => {
 
   console.log(`[phone-rag] messageType=${messageType}, phone=${payload.message?.call?.phoneNumber?.number ?? "none"}, assistantId=${payload.message?.call?.assistantId ?? "none"}`);
 
+  // Debug: store tool-calls and function-call payloads for inspection
+  if (messageType === "tool-calls" || messageType === "function-call" || messageType === "assistant-request") {
+    const db = getServiceClient();
+    await db.from("_debug_webhooks").insert({
+      message_type: messageType,
+      payload: payload.message,
+    }).then(() => {}, (err: unknown) => console.error("[debug] insert failed:", err));
+  }
+
   // ─── ASSISTANT REQUEST ────────────────────────────────────────────
   // Vapi calls this when a new call starts to get assistant config
   if (messageType === "assistant-request") {
@@ -183,7 +192,7 @@ Deno.serve(async (req: Request) => {
       if (toolCall.function.name === "search_knowledge") {
         let args: Record<string, string>;
         try {
-          args = JSON.parse(toolCall.function.arguments);
+          args = parseToolArgs(toolCall.function.arguments);
         } catch {
           results.push({
             toolCallId: toolCall.id,
@@ -234,7 +243,7 @@ Deno.serve(async (req: Request) => {
       } else if (toolCall.function.name === "search_knowledge_for_contact") {
         let args: Record<string, string>;
         try {
-          args = JSON.parse(toolCall.function.arguments);
+          args = parseToolArgs(toolCall.function.arguments);
         } catch {
           results.push({
             toolCallId: toolCall.id,
@@ -278,7 +287,7 @@ Deno.serve(async (req: Request) => {
       } else if (toolCall.function.name === "check_available_slots") {
         let args: Record<string, string>;
         try {
-          args = JSON.parse(toolCall.function.arguments);
+          args = parseToolArgs(toolCall.function.arguments);
         } catch {
           results.push({ toolCallId: toolCall.id, result: "Fehler beim Parsen der Anfrage." });
           continue;
@@ -300,7 +309,7 @@ Deno.serve(async (req: Request) => {
       } else if (toolCall.function.name === "schedule_appointment") {
         let args: Record<string, string>;
         try {
-          args = JSON.parse(toolCall.function.arguments);
+          args = parseToolArgs(toolCall.function.arguments);
         } catch {
           results.push({ toolCallId: toolCall.id, result: "Fehler beim Parsen der Anfrage." });
           continue;
@@ -419,6 +428,13 @@ Deno.serve(async (req: Request) => {
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────
+
+/** Vapi sends arguments as object (Anthropic model) or string (OpenAI model). Handle both. */
+function parseToolArgs(args: unknown): Record<string, string> {
+  if (typeof args === "object" && args !== null) return args as Record<string, string>;
+  if (typeof args === "string") return JSON.parse(args);
+  return {};
+}
 
 type AssistantConfig = {
   org_id: string;
