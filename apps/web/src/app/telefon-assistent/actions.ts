@@ -353,7 +353,7 @@ export async function disconnectCalendar() {
   revalidatePath("/telefon-assistent/einstellungen");
 }
 
-export function getGoogleOAuthUrl(): string {
+export async function getGoogleOAuthUrl(): Promise<string> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
   const redirectUri = `${appUrl}/telefon-assistent/kalender/callback`;

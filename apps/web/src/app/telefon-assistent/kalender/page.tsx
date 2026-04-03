@@ -17,7 +17,7 @@ export default async function CalendarPage() {
 
   let oauthUrl = "";
   try {
-    oauthUrl = getGoogleOAuthUrl();
+    oauthUrl = await getGoogleOAuthUrl();
   } catch {
     // GOOGLE_CLIENT_ID not set
   }
