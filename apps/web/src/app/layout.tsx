@@ -3,7 +3,7 @@ import { Fraunces, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/layout/shell";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { getUser } from "@/lib/db/supabase-server";
+import { getSession } from "@/lib/db/supabase-server";
 import { getOrgBranding, isPlatformAdmin } from "@/lib/db/queries/organization";
 import { hasFeature } from "@/lib/features/flags";
 
@@ -31,7 +31,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const user = await getUser();
+  const session = await getSession();
+  const user = session?.user ?? null;
 
   let branding = undefined;
   let isAdmin = false;

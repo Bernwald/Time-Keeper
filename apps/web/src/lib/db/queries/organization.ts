@@ -1,4 +1,4 @@
-import { createUserClient } from "../supabase-server";
+import { createUserClient, getUser } from "../supabase-server";
 import { requireOrgId } from "../org-context";
 
 export type Organization = {
@@ -56,12 +56,10 @@ export async function getOrgBranding(): Promise<OrgBranding> {
 }
 
 export async function isPlatformAdmin(): Promise<boolean> {
-  const db = await createUserClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
+  const user = await getUser();
   if (!user) return false;
 
+  const db = await createUserClient();
   const { data } = await db
     .from("profiles")
     .select("is_platform_admin")

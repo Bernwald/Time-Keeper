@@ -1,4 +1,5 @@
-import { createUserClient } from "./supabase-server";
+import { cache } from "react";
+import { createUserClient, getUser } from "./supabase-server";
 
 /**
  * Returns the active organization ID for the current request.
@@ -8,19 +9,17 @@ import { createUserClient } from "./supabase-server";
  * 2. User's default org from organization_members
  * 3. User's first org membership
  *
- * Throws if no org can be resolved.
+ * Wrapped with React cache() — resolved once per request.
  */
-export async function requireOrgId(): Promise<string> {
+export const requireOrgId = cache(async (): Promise<string> => {
   // Dedicated instance: fixed org from env
   const fixedOrgId = process.env.FIXED_ORG_ID;
   if (fixedOrgId) return fixedOrgId;
 
-  const supabase = await createUserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getUser();
   if (!user) throw new Error("Not authenticated");
+
+  const supabase = await createUserClient();
 
   // Try default org first
   const { data: defaultMember } = await supabase
@@ -43,4 +42,4 @@ export async function requireOrgId(): Promise<string> {
   if (firstMember) return firstMember.organization_id;
 
   throw new Error("User has no organization membership");
-}
+});
