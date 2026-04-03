@@ -447,6 +447,33 @@ export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; e
   }
 }
 
+// ─── TEST CALL ────────────────────────────────────────────────────────────
+
+export async function getTestCallConfig(): Promise<{
+  ok: boolean;
+  assistantId?: string;
+  assistantName?: string;
+  error?: string;
+}> {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  const { data: pa } = await db
+    .from("phone_assistants")
+    .select("provider_assistant_id, name, status")
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!pa?.provider_assistant_id) {
+    return { ok: false, error: "Assistent ist nicht bei Vapi registriert." };
+  }
+  if (pa.status !== "active") {
+    return { ok: false, error: "Assistent ist pausiert. Bitte zuerst aktivieren." };
+  }
+
+  return { ok: true, assistantId: pa.provider_assistant_id, assistantName: pa.name ?? undefined };
+}
+
 // ─── CALL LOGS ─────────────────────────────────────────────────────────────
 
 export async function deleteCallLog(callLogId: string) {

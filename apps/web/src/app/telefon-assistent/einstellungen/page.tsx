@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getAssistant, getCalendarIntegration } from "@/lib/db/queries/phone-assistant";
 import { VOICE_OPTIONS, LANGUAGE_MODES } from "@/lib/constants/phone-assistant";
 import { createOrUpdateAssistant, toggleAssistantStatus, provisionVapiAssistant, syncVapiConfig } from "../actions";
+import { TestCallButton } from "@/components/phone/test-call-button";
 import { card, btn, input, page, styles } from "@/components/ui/table-classes";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { VapiActionButton } from "@/components/phone/vapi-action-button";
@@ -319,6 +320,15 @@ export default async function AssistantSettingsPage() {
                 label="Config synchronisieren"
                 pendingLabel="Synchronisiere..."
               />
+              <div
+                className="border-t pt-4 mt-2"
+                style={{ borderColor: "var(--color-line)" }}
+              >
+                <p className="text-xs mb-3" style={{ color: "var(--color-muted)" }}>
+                  Testen Sie den Assistenten mit einem Browsertelefonat. Der Anruf durchlaeuft die vollstaendige Pipeline (Vapi → RAG → Kalender).
+                </p>
+                <TestCallButton />
+              </div>
             </>
           ) : (
             <>
