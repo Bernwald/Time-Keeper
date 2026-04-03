@@ -153,6 +153,13 @@ export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: s
   const serverUrl = process.env.VAPI_SERVER_URL
     ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/phone-assistant-rag`;
 
+  // Tools at assistant level (NOT model level) with server.url
+  // so Vapi routes tool-calls back to our serverUrl as webhooks
+  const serverTools = buildAssistantTools().map((t) => ({
+    ...t,
+    server: { url: serverUrl },
+  }));
+
   const result = await vapiRequest("/assistant", "POST", {
     name: `${pa.name} (${orgId.slice(0, 8)})`,
     serverUrl,
@@ -161,8 +168,8 @@ export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: s
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
-      tools: buildAssistantTools(),
     },
+    tools: serverTools,
     voice: { provider: "openai", voiceId: pa.voice_id_de ?? "alloy" },
     firstMessage: pa.greeting_de ?? "Hallo, wie kann ich Ihnen helfen?",
     maxDurationSeconds: pa.max_call_duration_seconds ?? 600,
@@ -209,13 +216,22 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
     return { ok: false, error: "Kein Provider-Assistent vorhanden." };
   }
 
+  const serverUrl = process.env.VAPI_SERVER_URL
+    ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/phone-assistant-rag`;
+
+  // Tools at assistant level with server.url for webhook routing
+  const serverTools = buildAssistantTools().map((t) => ({
+    ...t,
+    server: { url: serverUrl },
+  }));
+
   const result = await vapiRequest(`/assistant/${pa.provider_assistant_id}`, "PATCH", {
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       messages: [{ role: "system", content: pa.system_prompt ?? "Du bist ein hilfreicher Telefonassistent." }],
-      tools: buildAssistantTools(),
     },
+    tools: serverTools,
     voice: {
       provider: "openai",
       voiceId: pa.language_mode === "en" ? pa.voice_id_en : pa.voice_id_de,

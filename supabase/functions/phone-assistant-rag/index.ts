@@ -128,8 +128,13 @@ Deno.serve(async (req: Request) => {
     // Check if calendar integration is active for this org
     const calendarConfig = await getCalendarConfig(assistant.org_id);
 
-    // Build tools list (RAG + optional calendar)
-    const tools = buildAssistantTools(!!calendarConfig);
+    // Build tools list (RAG + optional calendar) as server-side tools
+    const toolDefs = buildAssistantTools(!!calendarConfig);
+    const serverUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/phone-assistant-rag`;
+    const serverTools = toolDefs.map((t) => ({
+      ...t,
+      server: { url: serverUrl },
+    }));
 
     // Extend system prompt with calendar instructions if active
     let systemPrompt = assistant.system_prompt;
@@ -137,7 +142,8 @@ Deno.serve(async (req: Request) => {
       systemPrompt += "\n\nDu kannst Termine vereinbaren. Nutze check_available_slots um freie Zeiten zu pruefen und schedule_appointment um einen Termin zu erstellen. Frage den Anrufer nach gewuenschtem Datum, Uhrzeit und Dauer bevor du einen Termin erstellst.";
     }
 
-    // Return assistant config with tools
+    // Return assistant config — tools at assistant level (NOT model level)
+    // so Vapi routes tool-calls back to our serverUrl as webhooks
     return jsonResponse({
       assistant: {
         firstMessage: greeting,
@@ -150,8 +156,8 @@ Deno.serve(async (req: Request) => {
               content: systemPrompt,
             },
           ],
-          tools,
         },
+        tools: serverTools,
         voice: {
           provider: "openai",
           voiceId:
