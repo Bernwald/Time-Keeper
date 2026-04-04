@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAssistant, listCallLogs, getCallStats, getKpiSummary, getCallCategoryStats } from "@/lib/db/queries/phone-assistant";
+import { getAssistant, listCallLogs, getCallStats, getCallCategoryStats } from "@/lib/db/queries/phone-assistant";
 import { CALL_STATUS_LABELS, ASSISTANT_STATUS_LABELS } from "@/lib/constants/phone-assistant";
 import { card, badge, page, styles } from "@/components/ui/table-classes";
 
@@ -21,11 +21,10 @@ function formatDate(iso: string): string {
 }
 
 export default async function PhoneAssistantDashboard() {
-  const [assistant, calls, stats, kpi, categories] = await Promise.all([
+  const [assistant, calls, stats, categories] = await Promise.all([
     getAssistant(),
     listCallLogs(20),
     getCallStats(30),
-    getKpiSummary(30),
     getCallCategoryStats(30),
   ]);
 
@@ -129,41 +128,6 @@ export default async function PhoneAssistantDashboard() {
                 ? formatDuration(Math.round(stats.avg_duration_seconds))
                 : "—"}
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* KPI Widget */}
-      {kpi && kpi.total_events > 0 && (
-        <div className={`${card.base} animate-slide-up`} style={styles.panel}>
-          <p className="text-[11px] font-medium uppercase tracking-wide mb-3" style={styles.muted}>
-            Einsparungen (30 Tage)
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-2xl font-semibold" style={{ color: "var(--color-success)" }}>
-                {kpi.time_saved_hours}h
-              </p>
-              <p className="text-[11px]" style={styles.muted}>Zeit gespart</p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold" style={{ color: "var(--color-text)" }}>
-                {kpi.calls_handled}
-              </p>
-              <p className="text-[11px]" style={styles.muted}>Anrufe automatisiert</p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold" style={{ color: "var(--color-accent)" }}>
-                {kpi.callers_identified}
-              </p>
-              <p className="text-[11px]" style={styles.muted}>Anrufer erkannt</p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold" style={{ color: "var(--color-warning)" }}>
-                {kpi.action_items_extracted}
-              </p>
-              <p className="text-[11px]" style={styles.muted}>Aufgaben extrahiert</p>
-            </div>
           </div>
         </div>
       )}
