@@ -21,6 +21,8 @@ export type PhoneAssistant = {
   business_hours_end: string | null;
   business_hours_tz: string | null;
   after_hours_message: string | null;
+  notification_email: string | null;
+  notification_mode: string;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -36,6 +38,11 @@ export type PhoneNumber = {
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ActionItem = {
+  task: string;
+  priority: string;
 };
 
 export type CallLog = {
@@ -58,6 +65,8 @@ export type CallLog = {
   activity_id: string | null;
   contact_id: string | null;
   cost_cents: number | null;
+  action_items: ActionItem[];
+  auto_tags: string[];
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -183,4 +192,46 @@ export async function getCallStats(days = 30): Promise<CallStats | null> {
   });
   if (error) return null;
   return (data?.[0] ?? null) as CallStats | null;
+}
+
+// ─── KPI ──────────────────────────────────────────────────────────────
+
+export type KpiSummary = {
+  calls_handled: number;
+  appointments_booked: number;
+  action_items_extracted: number;
+  callers_identified: number;
+  time_saved_seconds: number;
+  time_saved_hours: number;
+  total_events: number;
+  cost_per_call_avg: number | null;
+};
+
+export async function getKpiSummary(days = 30): Promise<KpiSummary | null> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { data, error } = await db.rpc("get_kpi_summary", {
+    p_org_id: orgId,
+    p_days: days,
+  });
+  if (error) return null;
+  return (data?.[0] ?? null) as KpiSummary | null;
+}
+
+// ─── CALL CATEGORIES ─────────────────────────────────────────────────
+
+export type CallCategoryStat = {
+  tag: string;
+  call_count: number;
+};
+
+export async function getCallCategoryStats(days = 30): Promise<CallCategoryStat[]> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { data, error } = await db.rpc("get_call_category_stats", {
+    p_org_id: orgId,
+    p_days: days,
+  });
+  if (error) return [];
+  return (data ?? []) as CallCategoryStat[];
 }

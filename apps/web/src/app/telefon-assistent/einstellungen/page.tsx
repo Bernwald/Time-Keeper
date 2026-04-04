@@ -292,6 +292,48 @@ export default async function AssistantSettingsPage() {
           </div>
         </div>
 
+        {/* Notifications */}
+        <div className={`${card.base} flex flex-col gap-4`} style={styles.panel}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
+            Benachrichtigungen
+          </h2>
+          <p className={input.hint} style={styles.muted}>
+            Erhalten Sie nach jedem Anruf eine Zusammenfassung mit Aktionspunkten per E-Mail.
+          </p>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={input.label} style={{ color: "var(--color-text)" }}>
+              Benachrichtigungsmodus
+            </label>
+            <select
+              name="notification_mode"
+              defaultValue={assistant?.notification_mode ?? "none"}
+              className={input.base}
+              style={styles.input}
+            >
+              <option value="none">Aus</option>
+              <option value="email">E-Mail nach jedem Anruf</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={input.label} style={{ color: "var(--color-text)" }}>
+              E-Mail-Adresse
+            </label>
+            <input
+              name="notification_email"
+              type="email"
+              defaultValue={assistant?.notification_email ?? ""}
+              placeholder="benachrichtigung@firma.de"
+              className={input.base}
+              style={styles.input}
+            />
+            <p className={input.hint} style={styles.muted}>
+              An diese Adresse werden Anruf-Zusammenfassungen gesendet.
+            </p>
+          </div>
+        </div>
+
         <div className="flex items-center gap-3 pt-2">
           <SubmitButton label="Speichern" pendingLabel="Wird gespeichert..." />
         </div>

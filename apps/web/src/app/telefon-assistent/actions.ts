@@ -25,6 +25,8 @@ export async function createOrUpdateAssistant(formData: FormData) {
   const businessHoursEnd = (formData.get("business_hours_end") as string)?.trim() || null;
   const businessHoursTz = (formData.get("business_hours_tz") as string)?.trim() || "Europe/Berlin";
   const afterHoursMessage = (formData.get("after_hours_message") as string)?.trim() || null;
+  const notificationEmail = (formData.get("notification_email") as string)?.trim() || null;
+  const notificationMode = (formData.get("notification_mode") as string) || "none";
 
   const values = {
     organization_id: orgId,
@@ -42,6 +44,8 @@ export async function createOrUpdateAssistant(formData: FormData) {
     business_hours_end: businessHoursEnd,
     business_hours_tz: businessHoursTz,
     after_hours_message: afterHoursMessage,
+    notification_email: notificationEmail,
+    notification_mode: notificationMode,
   };
 
   // Upsert: create or update (unique on organization_id)

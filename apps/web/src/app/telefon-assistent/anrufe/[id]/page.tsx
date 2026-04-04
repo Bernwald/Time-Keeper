@@ -119,6 +119,21 @@ export default async function CallDetailPage({
         </div>
       </div>
 
+      {/* Auto Tags */}
+      {call.auto_tags && call.auto_tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 animate-slide-up">
+          {call.auto_tags.map((tag) => (
+            <span
+              key={tag}
+              className={badge.base}
+              style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Summary */}
       {call.summary && (
         <div className={`${card.base} animate-slide-up`} style={styles.panel}>
@@ -128,6 +143,37 @@ export default async function CallDetailPage({
           <p className="text-sm leading-relaxed" style={{ color: "var(--color-text)" }}>
             {call.summary}
           </p>
+        </div>
+      )}
+
+      {/* Action Items */}
+      {call.action_items && call.action_items.length > 0 && (
+        <div className={`${card.base} animate-slide-up`} style={styles.panel}>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text)" }}>
+            Aktionspunkte
+          </h2>
+          <div className="flex flex-col gap-2">
+            {call.action_items.map((item, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span
+                  className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
+                  style={{
+                    background: item.priority === "high"
+                      ? "var(--color-error)"
+                      : item.priority === "medium"
+                        ? "var(--color-warning)"
+                        : "var(--color-muted)",
+                    color: "var(--color-bg)",
+                  }}
+                >
+                  {item.priority === "high" ? "!" : item.priority === "medium" ? "~" : "·"}
+                </span>
+                <span className="text-sm" style={{ color: "var(--color-text)" }}>
+                  {item.task}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

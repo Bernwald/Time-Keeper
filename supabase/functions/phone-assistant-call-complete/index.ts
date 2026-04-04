@@ -244,7 +244,21 @@ Deno.serve(async (req: Request) => {
     .eq("organization_id", orgId)
     .single();
 
-  // ─── 8. Store call_log ─────────────────────────────────────────────
+  // ─── 8. AI Enrichment: Action Items + Auto-Tags ────────────────────
+  let actionItems: Array<{ task: string; priority: string }> = [];
+  let autoTags: string[] = [];
+
+  if (transcript && transcript.length > 50) {
+    try {
+      const enrichment = await enrichCallWithAI(transcript, summary ?? "");
+      actionItems = enrichment.actionItems;
+      autoTags = enrichment.tags;
+    } catch (err) {
+      console.error("[enrichment] AI enrichment failed:", err);
+    }
+  }
+
+  // ─── 9. Store call_log ─────────────────────────────────────────────
   const { data: callLog, error: callLogError } = await db
     .from("call_logs")
     .insert({
@@ -266,6 +280,8 @@ Deno.serve(async (req: Request) => {
       activity_id: activityId,
       contact_id: contactId,
       cost_cents: call.cost ? Math.round(call.cost * 100) : null,
+      action_items: JSON.stringify(actionItems),
+      auto_tags: autoTags,
     })
     .select("id")
     .single();
@@ -275,7 +291,70 @@ Deno.serve(async (req: Request) => {
     return errorResponse("Failed to store call log", 500);
   }
 
-  console.log(`Call ${call.id} processed: callLog=${callLog?.id}, source=${sourceId}, activity=${activityId}, contact=${contactId}`);
+  // ─── 10. KPI Events ───────────────────────────────────────────────
+  // Record call_handled event
+  await db.rpc("record_kpi_event", {
+    p_org_id: orgId,
+    p_event_type: "call_handled",
+    p_feature_key: "phone_assistant",
+    p_value: 1,
+    p_metadata: JSON.stringify({
+      duration_seconds: durationSeconds,
+      caller_number: callerNumber,
+      status: mapCallStatus(call.status),
+    }),
+  }).then(() => {}, (err: unknown) => console.error("[kpi] call_handled failed:", err));
+
+  // Record time saved (estimate: manual call handling ~5 min overhead)
+  if (durationSeconds && durationSeconds > 0) {
+    const estimatedManualOverhead = 300; // 5 minutes for manual call handling/notes
+    await db.rpc("record_kpi_event", {
+      p_org_id: orgId,
+      p_event_type: "time_saved_seconds",
+      p_feature_key: "phone_assistant",
+      p_value: estimatedManualOverhead,
+      p_metadata: JSON.stringify({ reason: "automated_call_handling" }),
+    }).then(() => {}, (err: unknown) => console.error("[kpi] time_saved failed:", err));
+  }
+
+  // Record action items extracted
+  if (actionItems.length > 0) {
+    await db.rpc("record_kpi_event", {
+      p_org_id: orgId,
+      p_event_type: "action_items_extracted",
+      p_feature_key: "phone_assistant",
+      p_value: actionItems.length,
+      p_metadata: JSON.stringify({ items: actionItems }),
+    }).then(() => {}, (err: unknown) => console.error("[kpi] action_items failed:", err));
+  }
+
+  // ─── 11. Notification ─────────────────────────────────────────────
+  try {
+    const { data: paConfig } = await db
+      .from("phone_assistants")
+      .select("notification_email, notification_mode")
+      .eq("id", assistantId)
+      .single();
+
+    if (paConfig?.notification_mode === "email" && paConfig?.notification_email) {
+      await sendCallNotificationEmail(
+        paConfig.notification_email,
+        {
+          callerNumber,
+          summary: summary ?? "Keine Zusammenfassung verfuegbar.",
+          duration: durationSeconds,
+          actionItems,
+          autoTags,
+          callLogId: callLog?.id ?? "",
+          startedAt,
+        },
+      );
+    }
+  } catch (err) {
+    console.error("[notification] Failed to send:", err);
+  }
+
+  console.log(`Call ${call.id} processed: callLog=${callLog?.id}, source=${sourceId}, activity=${activityId}, contact=${contactId}, actionItems=${actionItems.length}, tags=${autoTags.join(",")}`);
 
   return jsonResponse({
     ok: true,
@@ -283,6 +362,8 @@ Deno.serve(async (req: Request) => {
     source_id: sourceId,
     activity_id: activityId,
     contact_id: contactId,
+    action_items_count: actionItems.length,
+    auto_tags: autoTags,
   });
 });
 
@@ -318,5 +399,163 @@ function mapCallStatus(vapiStatus?: string): string {
       return "missed";
     default:
       return "completed";
+  }
+}
+
+// ─── AI ENRICHMENT ──────────────────────────────────────────────────────
+
+type EnrichmentResult = {
+  actionItems: Array<{ task: string; priority: string }>;
+  tags: string[];
+};
+
+async function enrichCallWithAI(
+  transcript: string,
+  summary: string,
+): Promise<EnrichmentResult> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) {
+    console.warn("[enrichment] ANTHROPIC_API_KEY not set, skipping");
+    return { actionItems: [], tags: [] };
+  }
+
+  const truncatedTranscript = transcript.slice(0, 4000);
+
+  const prompt = `Analysiere dieses Telefongespraech-Transkript und extrahiere:
+
+1. **action_items**: Konkrete Aufgaben/Aktionspunkte die sich aus dem Gespraech ergeben (z.B. "Angebot senden", "Rueckruf vereinbart", "Unterlagen nachschicken"). Jeder Punkt hat ein "task" (Beschreibung) und "priority" ("high", "medium", "low").
+
+2. **tags**: Kategorisiere den Anruf mit 1-3 Tags aus dieser Liste: anfrage, beschwerde, support, terminvereinbarung, angebot, information, bestellung, stornierung, rueckruf, weiterleitung, sonstiges
+
+Antworte NUR mit validem JSON in diesem Format:
+{"action_items": [{"task": "...", "priority": "high|medium|low"}], "tags": ["tag1", "tag2"]}
+
+${summary ? `Zusammenfassung: ${summary}\n` : ""}
+Transkript:
+${truncatedTranscript}`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 500,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[enrichment] Anthropic API error:", response.status);
+      return { actionItems: [], tags: [] };
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text ?? "";
+
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("[enrichment] No JSON found in response");
+      return { actionItems: [], tags: [] };
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      actionItems: Array.isArray(parsed.action_items) ? parsed.action_items : [],
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+    };
+  } catch (err) {
+    console.error("[enrichment] Failed:", err);
+    return { actionItems: [], tags: [] };
+  }
+}
+
+// ─── NOTIFICATION EMAIL ─────────────────────────────────────────────────
+
+async function sendCallNotificationEmail(
+  to: string,
+  data: {
+    callerNumber: string;
+    summary: string;
+    duration: number | null;
+    actionItems: Array<{ task: string; priority: string }>;
+    autoTags: string[];
+    callLogId: string;
+    startedAt: string;
+  },
+): Promise<void> {
+  const resendKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendKey) {
+    console.warn("[notification] RESEND_API_KEY not set, skipping email");
+    return;
+  }
+
+  const appUrl = Deno.env.get("NEXT_PUBLIC_APP_URL") ?? "";
+  const durationStr = data.duration
+    ? `${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, "0")} Min.`
+    : "unbekannt";
+
+  const actionItemsHtml = data.actionItems.length > 0
+    ? `<h3 style="margin-top:16px;font-size:14px;">Aktionspunkte:</h3><ul>${
+      data.actionItems.map((a) =>
+        `<li><strong>[${a.priority}]</strong> ${a.task}</li>`
+      ).join("")
+    }</ul>`
+    : "";
+
+  const tagsHtml = data.autoTags.length > 0
+    ? `<p style="margin-top:8px;"><strong>Kategorien:</strong> ${data.autoTags.join(", ")}</p>`
+    : "";
+
+  const callDate = new Date(data.startedAt).toLocaleDateString("de-DE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;">
+      <h2 style="font-size:18px;">Neuer Anruf: ${data.callerNumber}</h2>
+      <p style="color:#666;font-size:13px;">${callDate} &middot; Dauer: ${durationStr}</p>
+      <div style="background:#f5f5f5;padding:12px 16px;border-radius:8px;margin:12px 0;">
+        <p style="font-size:14px;margin:0;">${data.summary}</p>
+      </div>
+      ${actionItemsHtml}
+      ${tagsHtml}
+      ${data.callLogId ? `<p style="margin-top:16px;"><a href="${appUrl}/telefon-assistent/anrufe/${data.callLogId}" style="color:#2563eb;">Anruf-Details anzeigen &rarr;</a></p>` : ""}
+    </div>
+  `;
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: "TimeKeeper <noreply@updates.timekeeper.app>",
+        to: [to],
+        subject: `Anruf von ${data.callerNumber} — ${data.autoTags[0] ?? "Neuer Anruf"}`,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[notification] Resend error:", response.status, errText);
+    } else {
+      console.log("[notification] Email sent to:", to);
+    }
+  } catch (err) {
+    console.error("[notification] Send failed:", err);
   }
 }

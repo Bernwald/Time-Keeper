@@ -129,10 +129,65 @@ Deno.serve(async (req: Request) => {
     }
 
     // Determine greeting based on language mode
-    const greeting =
+    let greeting =
       assistant.language_mode === "en"
         ? assistant.greeting_en
         : assistant.greeting_de;
+
+    // ─── CALLER CONTEXT WHISPER ─────────────────────────────────────
+    // If we can identify the caller, personalize greeting + inject context
+    const callerNumber = payload.message.call?.customer?.number ?? "";
+    let callerBriefing = "";
+
+    if (callerNumber) {
+      const callerContext = await getCallerContextFromDB(assistant.org_id, callerNumber);
+      if (callerContext) {
+        // Personalize greeting with caller name
+        const firstName = callerContext.contact_name?.split(" ")[0] ?? "";
+        if (firstName) {
+          greeting = assistant.language_mode === "en"
+            ? `Hello ${firstName}! Nice to hear from you again. How can I help you today?`
+            : `Hallo ${firstName}! Schoen, dass Sie wieder anrufen. Wie kann ich Ihnen heute helfen?`;
+        }
+
+        // Build context briefing for system prompt
+        const parts: string[] = [];
+        parts.push(`Der Anrufer ist: ${callerContext.contact_name}`);
+        if (callerContext.company_name) parts.push(`Firma: ${callerContext.company_name}`);
+        if (callerContext.contact_email) parts.push(`E-Mail: ${callerContext.contact_email}`);
+
+        if (callerContext.recent_activities && callerContext.recent_activities.length > 0) {
+          const actSummary = callerContext.recent_activities
+            .map((a: { title: string; date: string; activity_type: string }) =>
+              `${a.date}: ${a.title} (${a.activity_type})`)
+            .join("; ");
+          parts.push(`Letzte Interaktionen: ${actSummary}`);
+        }
+
+        if (callerContext.open_processes && callerContext.open_processes.length > 0) {
+          const procSummary = callerContext.open_processes
+            .map((p: { name: string; status: string }) => p.name)
+            .join(", ");
+          parts.push(`Offene Prozesse: ${procSummary}`);
+        }
+
+        if (callerContext.next_appointment) {
+          parts.push(`Naechster Termin: ${callerContext.next_appointment.title} am ${callerContext.next_appointment.datetime}`);
+        }
+
+        callerBriefing = `\n\n--- ANRUFER-BRIEFING ---\n${parts.join("\n")}\n--- ENDE BRIEFING ---\nNutze dieses Wissen im Gespraech, aber gib nicht ungefragt alle Details preis. Begruesse den Anrufer persoenlich.`;
+
+        // Record KPI event
+        const db = getServiceClient();
+        await db.rpc("record_kpi_event", {
+          p_org_id: assistant.org_id,
+          p_event_type: "caller_identified",
+          p_feature_key: "phone_assistant",
+          p_value: 1,
+          p_metadata: JSON.stringify({ contact_name: callerContext.contact_name }),
+        }).then(() => {}, (err: unknown) => console.error("[kpi] record failed:", err));
+      }
+    }
 
     // Check if calendar integration is active for this org
     const calendarConfig = await getCalendarConfig(assistant.org_id);
@@ -145,8 +200,11 @@ Deno.serve(async (req: Request) => {
       server: { url: serverUrl },
     }));
 
-    // Extend system prompt with calendar instructions if active
+    // Extend system prompt with caller briefing + calendar instructions
     let systemPrompt = assistant.system_prompt;
+    if (callerBriefing) {
+      systemPrompt += callerBriefing;
+    }
     if (calendarConfig) {
       systemPrompt += "\n\nDu kannst Termine vereinbaren. Nutze check_available_slots um freie Zeiten zu pruefen und schedule_appointment um einen Termin zu erstellen. Frage den Anrufer nach gewuenschtem Datum, Uhrzeit und Dauer bevor du einen Termin erstellst.";
     }
@@ -909,6 +967,38 @@ function formatDateDE(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+// ─── CALLER CONTEXT ─────────────────────────────────────────────────────
+
+type CallerContext = {
+  contact_id: string;
+  contact_name: string;
+  company_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  recent_activities: Array<{ title: string; date: string; activity_type: string }>;
+  open_processes: Array<{ name: string; status: string }>;
+  next_appointment: { title: string; datetime: string } | null;
+};
+
+async function getCallerContextFromDB(
+  orgId: string,
+  callerNumber: string,
+): Promise<CallerContext | null> {
+  const db = getServiceClient();
+  const { data, error } = await db.rpc("get_caller_context", {
+    p_org_id: orgId,
+    p_caller_number: callerNumber,
+  });
+
+  if (error) {
+    console.error("[caller-context] Error:", error);
+    return null;
+  }
+
+  if (!data || data.length === 0 || !data[0].contact_id) return null;
+  return data[0] as CallerContext;
 }
 
 // ─── BUSINESS HOURS ──────────────────────────────────────────────────────

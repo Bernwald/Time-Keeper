@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAssistant, listCallLogs, getCallStats } from "@/lib/db/queries/phone-assistant";
+import { getAssistant, listCallLogs, getCallStats, getKpiSummary, getCallCategoryStats } from "@/lib/db/queries/phone-assistant";
 import { CALL_STATUS_LABELS, ASSISTANT_STATUS_LABELS } from "@/lib/constants/phone-assistant";
 import { card, badge, page, styles } from "@/components/ui/table-classes";
 
@@ -21,10 +21,12 @@ function formatDate(iso: string): string {
 }
 
 export default async function PhoneAssistantDashboard() {
-  const [assistant, calls, stats] = await Promise.all([
+  const [assistant, calls, stats, kpi, categories] = await Promise.all([
     getAssistant(),
     listCallLogs(20),
     getCallStats(30),
+    getKpiSummary(30),
+    getCallCategoryStats(30),
   ]);
 
   const statusInfo = assistant
@@ -131,27 +133,83 @@ export default async function PhoneAssistantDashboard() {
         </div>
       )}
 
-      {/* Language split mini-bar */}
-      {stats && stats.total_calls > 0 && (
+      {/* KPI Widget */}
+      {kpi && kpi.total_events > 0 && (
         <div className={`${card.base} animate-slide-up`} style={styles.panel}>
-          <p className="text-[11px] font-medium uppercase tracking-wide mb-2" style={styles.muted}>
-            Sprachverteilung
+          <p className="text-[11px] font-medium uppercase tracking-wide mb-3" style={styles.muted}>
+            Einsparungen (30 Tage)
           </p>
-          <div className="flex gap-3 text-xs">
-            <span style={{ color: "var(--color-text)" }}>
-              DE: {stats.calls_de} ({Math.round((stats.calls_de / stats.total_calls) * 100)}%)
-            </span>
-            <span style={{ color: "var(--color-text)" }}>
-              EN: {stats.calls_en} ({Math.round((stats.calls_en / stats.total_calls) * 100)}%)
-            </span>
-            {stats.calls_other > 0 && (
-              <span style={styles.muted}>
-                Andere: {stats.calls_other}
-              </span>
-            )}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-2xl font-semibold" style={{ color: "var(--color-success)" }}>
+                {kpi.time_saved_hours}h
+              </p>
+              <p className="text-[11px]" style={styles.muted}>Zeit gespart</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold" style={{ color: "var(--color-text)" }}>
+                {kpi.calls_handled}
+              </p>
+              <p className="text-[11px]" style={styles.muted}>Anrufe automatisiert</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold" style={{ color: "var(--color-accent)" }}>
+                {kpi.callers_identified}
+              </p>
+              <p className="text-[11px]" style={styles.muted}>Anrufer erkannt</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold" style={{ color: "var(--color-warning)" }}>
+                {kpi.action_items_extracted}
+              </p>
+              <p className="text-[11px]" style={styles.muted}>Aufgaben extrahiert</p>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Language split + Categories */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-slide-up">
+        {stats && stats.total_calls > 0 && (
+          <div className={card.base} style={styles.panel}>
+            <p className="text-[11px] font-medium uppercase tracking-wide mb-2" style={styles.muted}>
+              Sprachverteilung
+            </p>
+            <div className="flex gap-3 text-xs">
+              <span style={{ color: "var(--color-text)" }}>
+                DE: {stats.calls_de} ({Math.round((stats.calls_de / stats.total_calls) * 100)}%)
+              </span>
+              <span style={{ color: "var(--color-text)" }}>
+                EN: {stats.calls_en} ({Math.round((stats.calls_en / stats.total_calls) * 100)}%)
+              </span>
+              {stats.calls_other > 0 && (
+                <span style={styles.muted}>
+                  Andere: {stats.calls_other}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {categories && categories.length > 0 && (
+          <div className={card.base} style={styles.panel}>
+            <p className="text-[11px] font-medium uppercase tracking-wide mb-2" style={styles.muted}>
+              Anruf-Kategorien
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((cat) => (
+                <span
+                  key={cat.tag}
+                  className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                  style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                >
+                  {cat.tag} ({cat.call_count})
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Recent calls */}
       <div className="flex flex-col gap-3 animate-slide-up">
@@ -192,6 +250,14 @@ export default async function PhoneAssistantDashboard() {
                         {call.detected_language && (
                           <span className="text-[10px] font-medium uppercase" style={styles.muted}>
                             {call.detected_language}
+                          </span>
+                        )}
+                        {call.auto_tags && call.auto_tags.length > 0 && (
+                          <span
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                            style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+                          >
+                            {call.auto_tags[0]}
                           </span>
                         )}
                       </div>
