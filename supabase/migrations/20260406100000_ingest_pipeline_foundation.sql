@@ -224,36 +224,37 @@ ALTER TABLE public.rate_limit_buckets ENABLE ROW LEVEL SECURITY;
 -- internal functions so Edge Functions can call them through supabase-js
 -- without needing direct pgmq schema access.
 
-CREATE OR REPLACE FUNCTION public.pgmq_send(queue_name TEXT, msg JSONB)
+CREATE OR REPLACE FUNCTION public.pgmq_send(p_queue TEXT, p_msg JSONB)
 RETURNS BIGINT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pgmq AS $$
 DECLARE v_id BIGINT;
 BEGIN
-  SELECT pgmq.send(queue_name, msg) INTO v_id;
+  SELECT pgmq.send(p_queue, p_msg) INTO v_id;
   RETURN v_id;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.pgmq_read(queue_name TEXT, vt INT, qty INT)
-RETURNS SETOF pgmq.message_record LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pgmq AS $$
+CREATE OR REPLACE FUNCTION public.pgmq_read(p_queue TEXT, p_vt INT, p_qty INT)
+RETURNS TABLE (msg_id BIGINT, read_ct INT, enqueued_at TIMESTAMPTZ, vt TIMESTAMPTZ, message JSONB)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pgmq AS $$
 BEGIN
-  RETURN QUERY SELECT * FROM pgmq.read(queue_name, vt, qty);
+  RETURN QUERY SELECT * FROM pgmq.read(p_queue, p_vt, p_qty);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.pgmq_delete(queue_name TEXT, msg_id BIGINT)
+CREATE OR REPLACE FUNCTION public.pgmq_delete(p_queue TEXT, p_msg_id BIGINT)
 RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pgmq AS $$
 DECLARE v_ok BOOLEAN;
 BEGIN
-  SELECT pgmq.delete(queue_name, msg_id) INTO v_ok;
+  SELECT pgmq.delete(p_queue, p_msg_id) INTO v_ok;
   RETURN v_ok;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.pgmq_archive(queue_name TEXT, msg_id BIGINT)
+CREATE OR REPLACE FUNCTION public.pgmq_archive(p_queue TEXT, p_msg_id BIGINT)
 RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pgmq AS $$
 DECLARE v_ok BOOLEAN;
 BEGIN
-  SELECT pgmq.archive(queue_name, msg_id) INTO v_ok;
+  SELECT pgmq.archive(p_queue, p_msg_id) INTO v_ok;
   RETURN v_ok;
 END;
 $$;

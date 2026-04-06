@@ -24,8 +24,8 @@ export async function enqueue<T>(
 ): Promise<number> {
   const supabase = getServiceClient();
   const { data, error } = await supabase.rpc("pgmq_send", {
-    queue_name: queue,
-    msg:        message as unknown as Record<string, unknown>,
+    p_queue: queue,
+    p_msg:   message as unknown as Record<string, unknown>,
   });
   if (error) throw error;
   return data as number;
@@ -38,9 +38,9 @@ export async function readBatch<T>(
 ): Promise<QueueMessage<T>[]> {
   const supabase = getServiceClient();
   const { data, error } = await supabase.rpc("pgmq_read", {
-    queue_name: queue,
-    vt:         visibilityTimeoutSec,
-    qty,
+    p_queue: queue,
+    p_vt:    visibilityTimeoutSec,
+    p_qty:   qty,
   });
   if (error) throw error;
   return (data ?? []) as QueueMessage<T>[];
@@ -49,8 +49,8 @@ export async function readBatch<T>(
 export async function ack(queue: QueueName, msgId: number): Promise<void> {
   const supabase = getServiceClient();
   const { error } = await supabase.rpc("pgmq_delete", {
-    queue_name: queue,
-    msg_id:     msgId,
+    p_queue:  queue,
+    p_msg_id: msgId,
   });
   if (error) throw error;
 }
@@ -58,8 +58,8 @@ export async function ack(queue: QueueName, msgId: number): Promise<void> {
 export async function archive(queue: QueueName, msgId: number): Promise<void> {
   const supabase = getServiceClient();
   const { error } = await supabase.rpc("pgmq_archive", {
-    queue_name: queue,
-    msg_id:     msgId,
+    p_queue:  queue,
+    p_msg_id: msgId,
   });
   if (error) throw error;
 }
