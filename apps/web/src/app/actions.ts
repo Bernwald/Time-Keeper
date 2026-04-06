@@ -325,11 +325,13 @@ export async function backfillEmbeddings(sourceId: string) {
     const embedding = embeddings[i];
     if (!embedding) continue;
     updatePromises.push(
-      db
-        .from("content_chunks")
-        .update({ embedding: JSON.stringify(embedding) })
-        .eq("id", chunks[i].id)
-        .eq("organization_id", orgId),
+      Promise.resolve(
+        db
+          .from("content_chunks")
+          .update({ embedding: JSON.stringify(embedding) })
+          .eq("id", chunks[i].id)
+          .eq("organization_id", orgId),
+      ),
     );
     updated++;
   }
