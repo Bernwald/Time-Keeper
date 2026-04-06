@@ -96,13 +96,14 @@ export async function getBoostSourceIds(entities: ResolvedEntity[]): Promise<str
     const ids = byType[type];
     if (ids.length === 0) continue;
     queries.push(
-      db
-        .from("source_links")
-        .select("source_id")
-        .eq("organization_id", orgId)
-        .eq("linked_type", type)
-        .in("linked_id", ids)
-        .then((res) => ({ data: res.data as { source_id: string }[] | null })),
+      Promise.resolve(
+        db
+          .from("source_links")
+          .select("source_id")
+          .eq("organization_id", orgId)
+          .eq("linked_type", type)
+          .in("linked_id", ids),
+      ).then((res) => ({ data: res.data as { source_id: string }[] | null })),
     );
   }
 

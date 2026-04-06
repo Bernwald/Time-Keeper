@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "mcp__claude_ai_Supabase__execute_sql",
-      "mcp__claude_ai_Supabase__apply_migration"
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Vercel__web_fetch_vercel_url",
+      "Bash(supabase db:*)",
+      "Bash(where supabase:*)",
+      "Bash(npx supabase:*)",
+      "Bash(npm install:*)",
+      "Bash(python3 -c:*)",
+      "Bash(node -e:*)"
     ]
   }
 }
