@@ -5,6 +5,7 @@ import Link from "next/link";
 const adminNav = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/kunden", label: "Kunden" },
+  { href: "/admin/integrationen", label: "Integrationen" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
