@@ -17,6 +17,10 @@ import {
   type CalendarSettings,
 } from "../_shared/google-calendar.ts";
 
+// Debug webhooks are opt-in — off by default to avoid storing PII (caller name,
+// phone, tokens) in _debug_webhooks. Enable per-env by setting DEBUG_WEBHOOKS=true.
+const DEBUG_WEBHOOKS = Deno.env.get("DEBUG_WEBHOOKS") === "true";
+
 // Vapi Server URL message types
 type VapiMessage = {
   message: {
@@ -82,7 +86,7 @@ Deno.serve(async (req: Request) => {
   console.log(`[phone-rag] messageType=${messageType}, phone=${payload.message?.call?.phoneNumber?.number ?? "none"}, assistantId=${payload.message?.call?.assistantId ?? "none"}`);
 
   // Debug: store tool-calls and function-call payloads for inspection
-  if (messageType === "tool-calls" || messageType === "function-call" || messageType === "assistant-request") {
+  if (DEBUG_WEBHOOKS && (messageType === "tool-calls" || messageType === "function-call" || messageType === "assistant-request")) {
     const db = getServiceClient();
     await db.from("_debug_webhooks").insert({
       message_type: messageType,
@@ -395,11 +399,13 @@ Deno.serve(async (req: Request) => {
     } catch (err) {
       console.error("[phone-rag] Unhandled error in tool-calls:", err);
       // Store error in debug table
-      const db2 = getServiceClient();
-      await db2.from("_debug_webhooks").insert({
-        message_type: "tool-calls-error",
-        payload: { error: String(err), stack: err instanceof Error ? err.stack : undefined },
-      }).then(() => {}, () => {});
+      if (DEBUG_WEBHOOKS) {
+        const db2 = getServiceClient();
+        await db2.from("_debug_webhooks").insert({
+          message_type: "tool-calls-error",
+          payload: { error: String(err), stack: err instanceof Error ? err.stack : undefined },
+        }).then(() => {}, () => {});
+      }
       return jsonResponse({
         results: toolCalls.map((tc) => ({
           toolCallId: tc.id,
@@ -409,11 +415,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // Debug: store tool-call results
-    const dbDebug = getServiceClient();
-    await dbDebug.from("_debug_webhooks").insert({
-      message_type: "tool-calls-results",
-      payload: { results },
-    }).then(() => {}, () => {});
+    if (DEBUG_WEBHOOKS) {
+      const dbDebug = getServiceClient();
+      await dbDebug.from("_debug_webhooks").insert({
+        message_type: "tool-calls-results",
+        payload: { results },
+      }).then(() => {}, () => {});
+    }
 
     return jsonResponse({ results });
   }
@@ -863,20 +871,21 @@ async function handleCheckAvailableSlots(
   }
 
   // Debug: store calendar query details
-  const dbCal = getServiceClient();
-  await dbCal.from("_debug_webhooks").insert({
-    message_type: "calendar-debug",
-    payload: {
-      step: "before_listAvailableSlots",
-      calendar_id: config.calendar_id,
-      targetDate,
-      duration,
-      settings,
-      has_access_token: !!accessToken,
-      token_length: accessToken?.length,
-      token_prefix: accessToken?.slice(0, 10),
-    },
-  }).then(() => {}, () => {});
+  const dbCal = DEBUG_WEBHOOKS ? getServiceClient() : null;
+  if (dbCal) {
+    await dbCal.from("_debug_webhooks").insert({
+      message_type: "calendar-debug",
+      payload: {
+        step: "before_listAvailableSlots",
+        calendar_id: config.calendar_id,
+        targetDate,
+        duration,
+        settings,
+        has_access_token: !!accessToken,
+        token_length: accessToken?.length,
+      },
+    }).then(() => {}, () => {});
+  }
 
   const slots = await listAvailableSlots(
     accessToken,
@@ -888,22 +897,26 @@ async function handleCheckAvailableSlots(
 
   // Check for error marker from FreeBusy
   if (slots.length > 0 && slots[0].start === "__ERROR__") {
-    await dbCal.from("_debug_webhooks").insert({
-      message_type: "calendar-error",
-      payload: { error: slots[0].end, targetDate, calendar_id: config.calendar_id },
-    }).then(() => {}, () => {});
+    if (dbCal) {
+      await dbCal.from("_debug_webhooks").insert({
+        message_type: "calendar-error",
+        payload: { error: slots[0].end, targetDate, calendar_id: config.calendar_id },
+      }).then(() => {}, () => {});
+    }
     return "Kalender-Zugriff fehlgeschlagen. Bitte spaeter erneut versuchen.";
   }
 
   // Debug: store result
-  await dbCal.from("_debug_webhooks").insert({
-    message_type: "calendar-debug",
-    payload: {
-      step: "after_listAvailableSlots",
-      slots_count: slots.length,
-      slots: slots.slice(0, 5),
-    },
-  }).then(() => {}, () => {});
+  if (dbCal) {
+    await dbCal.from("_debug_webhooks").insert({
+      message_type: "calendar-debug",
+      payload: {
+        step: "after_listAvailableSlots",
+        slots_count: slots.length,
+        slots: slots.slice(0, 5),
+      },
+    }).then(() => {}, () => {});
+  }
 
   if (slots.length === 0) {
     return `Am ${formatDateDE(targetDate)} sind leider keine freien Termine (${duration} Minuten) verfuegbar.`;

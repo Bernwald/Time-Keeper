@@ -15,17 +15,31 @@ export type Source = {
   updated_at: string;
 };
 
-export async function listSources(): Promise<Source[]> {
+const DEFAULT_LIMIT = 200;
+
+export async function listSources(options?: { limit?: number }): Promise<Source[]> {
   const orgId = await requireOrgId();
   const db = await createUserClient();
   const { data, error } = await db
     .from("sources")
     .select("id, title, description, source_type, status, word_count, raw_text, storage_path, original_filename, created_at, updated_at")
     .eq("organization_id", orgId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(options?.limit ?? DEFAULT_LIMIT);
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function countReadySources(): Promise<number> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { count } = await db
+    .from("sources")
+    .select("*", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("status", "ready");
+  return count ?? 0;
 }
 
 export async function getSourceById(id: string): Promise<Source | null> {

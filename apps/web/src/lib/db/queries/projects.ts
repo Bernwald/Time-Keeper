@@ -11,16 +11,29 @@ export type Project = {
   updated_at: string;
 };
 
-export async function listProjects(): Promise<Project[]> {
+const DEFAULT_LIMIT = 200;
+
+export async function listProjects(options?: { limit?: number }): Promise<Project[]> {
   const orgId = await requireOrgId();
   const db = await createUserClient();
   const { data, error } = await db
     .from("projects")
     .select("id, company_id, name, status, description, created_at, updated_at")
     .eq("organization_id", orgId)
-    .order("name");
+    .order("name")
+    .limit(options?.limit ?? DEFAULT_LIMIT);
   if (error) throw error;
   return data ?? [];
+}
+
+export async function countProjects(): Promise<number> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { count } = await db
+    .from("projects")
+    .select("*", { count: "exact", head: true })
+    .eq("organization_id", orgId);
+  return count ?? 0;
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {

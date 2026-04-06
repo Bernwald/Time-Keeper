@@ -15,16 +15,29 @@ export type Contact = {
   updated_at: string;
 };
 
-export async function listContacts(): Promise<Contact[]> {
+const DEFAULT_LIMIT = 200;
+
+export async function listContacts(options?: { limit?: number }): Promise<Contact[]> {
   const orgId = await requireOrgId();
   const db = await createUserClient();
   const { data, error } = await db
     .from("contacts")
     .select("id, company_id, first_name, last_name, email, phone, role_title, status, notes, created_at, updated_at")
     .eq("organization_id", orgId)
-    .order("last_name");
+    .order("last_name")
+    .limit(options?.limit ?? DEFAULT_LIMIT);
   if (error) throw error;
   return data ?? [];
+}
+
+export async function countContacts(): Promise<number> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { count } = await db
+    .from("contacts")
+    .select("*", { count: "exact", head: true })
+    .eq("organization_id", orgId);
+  return count ?? 0;
 }
 
 export async function getContactById(id: string): Promise<Contact | null> {

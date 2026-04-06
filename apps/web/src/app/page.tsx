@@ -1,20 +1,26 @@
 import Link from "next/link";
-import { listSources } from "@/lib/db/queries/sources";
-import { listCompanies } from "@/lib/db/queries/companies";
-import { listContacts } from "@/lib/db/queries/contacts";
-import { listProjects } from "@/lib/db/queries/projects";
+import { listSources, countReadySources } from "@/lib/db/queries/sources";
+import { countCompanies } from "@/lib/db/queries/companies";
+import { countContacts } from "@/lib/db/queries/contacts";
+import { countProjects } from "@/lib/db/queries/projects";
 import { btn, page, styles } from "@/components/ui/table-classes";
 
-export const dynamic = 'force-dynamic';
+// Dashboard uses count helpers (head: true) and a short recent-sources list —
+// no full table loads, so we can revalidate instead of force-dynamic.
+export const revalidate = 30;
 
 export default async function HomePage() {
-  const [sources, companies, contacts, projects] = await Promise.all([
-    listSources(),
-    listCompanies(),
-    listContacts(),
-    listProjects(),
+  const [recentSources, readySources, companyCount, contactCount, projectCount] = await Promise.all([
+    listSources({ limit: 5 }),
+    countReadySources(),
+    countCompanies(),
+    countContacts(),
+    countProjects(),
   ]);
-  const readySources = sources.filter((s) => s.status === "ready").length;
+  const sources = recentSources;
+  const companies = { length: companyCount };
+  const contacts = { length: contactCount };
+  const projects = { length: projectCount };
 
   return (
     <div className="flex flex-col">
