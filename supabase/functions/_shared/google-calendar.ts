@@ -93,6 +93,36 @@ export async function refreshAccessToken(
 
 // ─── AVAILABLE SLOTS ─────────────────────────────────────────────────────────
 
+async function listBusyCalendarIds(
+  accessToken: string,
+  primaryCalendarId: string,
+): Promise<string[]> {
+  // Fetch all calendars the user is subscribed to and consider every one that
+  // is not hidden for busy-time aggregation. We intentionally ignore the
+  // `selected` flag (that only controls UI visibility) so secondary calendars
+  // like "Chiara&Thomas" or "Arbeit" always count as busy time.
+  try {
+    const res = await fetch(
+      `${GOOGLE_CALENDAR_API}/users/me/calendarList?minAccessRole=freeBusyReader&showHidden=false`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      console.error("[calendar] calendarList error:", res.status, await res.text());
+      return [primaryCalendarId];
+    }
+    const data = await res.json();
+    const items = (data.items ?? []) as Array<{ id: string; hidden?: boolean }>;
+    const ids = items.filter((c) => !c.hidden && c.id).map((c) => c.id);
+    // Ensure the primary/booking calendar is always included, even if for some
+    // reason it is not returned by calendarList.
+    if (!ids.includes(primaryCalendarId)) ids.push(primaryCalendarId);
+    return ids;
+  } catch (err) {
+    console.error("[calendar] calendarList fetch failed:", err);
+    return [primaryCalendarId];
+  }
+}
+
 export async function listAvailableSlots(
   accessToken: string,
   calendarId: string,
@@ -104,35 +134,54 @@ export async function listAvailableSlots(
   const startOfDay = `${date}T${settings.working_hours_start}:00`;
   const endOfDay = `${date}T${settings.working_hours_end}:00`;
 
-  // Query freebusy to find busy periods
-  const response = await fetch(`${GOOGLE_CALENDAR_API}/freeBusy`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      timeMin: toISOWithTZ(startOfDay, tz),
-      timeMax: toISOWithTZ(endOfDay, tz),
-      timeZone: tz,
-      items: [{ id: calendarId }],
-    }),
-  });
+  // Aggregate busy periods across ALL of the user's calendars, not just the
+  // primary booking calendar. Otherwise events in secondary calendars (e.g.
+  // shared family or work calendars) would be treated as free time.
+  const calendarIds = await listBusyCalendarIds(accessToken, calendarId);
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("[calendar] FreeBusy error:", response.status, errText);
-    // Return special marker so caller can distinguish error from empty
-    return [{ start: "__ERROR__", end: `${response.status}: ${errText.slice(0, 200)}` }];
+  // FreeBusy supports up to 50 items per request — chunk defensively.
+  const chunks: string[][] = [];
+  for (let i = 0; i < calendarIds.length; i += 50) {
+    chunks.push(calendarIds.slice(i, i + 50));
   }
 
-  const data = await response.json();
-  const calendarData = data.calendars?.[calendarId];
-  const busyPeriods = calendarData?.busy ?? [];
-  const errors = calendarData?.errors;
-  if (errors) {
-    console.error("[calendar] FreeBusy calendar errors:", JSON.stringify(errors));
-    return [{ start: "__ERROR__", end: JSON.stringify(errors).slice(0, 200) }];
+  const busyPeriods: Array<{ start: string; end: string }> = [];
+  for (const chunk of chunks) {
+    const response = await fetch(`${GOOGLE_CALENDAR_API}/freeBusy`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        timeMin: toISOWithTZ(startOfDay, tz),
+        timeMax: toISOWithTZ(endOfDay, tz),
+        timeZone: tz,
+        items: chunk.map((id) => ({ id })),
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[calendar] FreeBusy error:", response.status, errText);
+      return [{ start: "__ERROR__", end: `${response.status}: ${errText.slice(0, 200)}` }];
+    }
+
+    const data = await response.json();
+    const calendars = data.calendars ?? {};
+    for (const id of chunk) {
+      const calendarData = calendars[id];
+      if (!calendarData) continue;
+      if (calendarData.errors) {
+        // Skip calendars we cannot read (e.g. no access) but keep going —
+        // a single unreadable secondary calendar must not break scheduling.
+        console.warn("[calendar] FreeBusy calendar skipped:", id, JSON.stringify(calendarData.errors));
+        continue;
+      }
+      for (const period of calendarData.busy ?? []) {
+        busyPeriods.push(period);
+      }
+    }
   }
 
   // Convert busy periods to minutes since start of working hours

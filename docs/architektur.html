@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeKeeper — Architekturübersicht</title>
+<style>
+  :root {
+    --bg:        #faf8f5;
+    --panel:     #ffffff;
+    --line:      #e8e3dc;
+    --text:      #1a1814;
+    --muted:     #6b6660;
+    --accent:    #b8753a;
+    --accent-soft:#f3e7d6;
+    --warn:      #c7503a;
+    --ok:        #4a7d4a;
+    --shadow:    0 2px 8px rgba(0,0,0,.04);
+    --radius:    16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14110d;
+      --panel:     #1c1814;
+      --line:      #2d2823;
+      --text:      #f0ebe2;
+      --muted:     #8a8378;
+      --accent:    #d99659;
+      --accent-soft:#3a2a18;
+      --warn:      #e57058;
+      --ok:        #7ab07a;
+      --shadow:    0 2px 8px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 96px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 18px; margin: 32px 0 12px; color: var(--text); }
+  p.lede { color: var(--muted); margin: 0 0 24px; max-width: 720px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .layer {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow); position: relative;
+  }
+  .layer-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 12px; font-weight: 600; }
+  .nodes { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 720px) { .nodes { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 980px) { .nodes { grid-template-columns: repeat(3, 1fr); } }
+  .node {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; cursor: pointer; min-height: 64px;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: transform .12s, border-color .12s, background .12s;
+    text-align: left; font: inherit; color: inherit; width: 100%;
+  }
+  .node:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .node .name { font-weight: 600; font-size: 14px; }
+  .node .sub  { font-size: 12px; color: var(--muted); }
+  .node .tag {
+    align-self: flex-start; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 2px 6px; border-radius: 4px;
+    background: var(--accent-soft); color: var(--accent); margin-top: 6px; font-weight: 600;
+  }
+  .arrow { text-align: center; color: var(--muted); font-size: 18px; line-height: 1; margin: -2px 0; }
+
+  /* Modal */
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none;
+    align-items: flex-end; justify-content: center; z-index: 50; padding: 0;
+  }
+  .backdrop.open { display: flex; }
+  @media (min-width: 720px) {
+    .backdrop { align-items: center; padding: 24px; }
+  }
+  .modal {
+    background: var(--panel); color: var(--text); border-radius: 20px 20px 0 0;
+    max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 24px rgba(0,0,0,.2);
+  }
+  @media (min-width: 720px) { .modal { border-radius: var(--radius); } }
+  .modal h3 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+  .modal .role { font-size: 13px; color: var(--accent); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
+  .modal h4 { font-size: 14px; margin: 18px 0 6px; color: var(--text); }
+  .modal p, .modal li { color: var(--text); font-size: 15px; }
+  .modal .analogie { background: var(--accent-soft); border-left: 3px solid var(--accent);
+    padding: 12px 14px; border-radius: 8px; margin: 12px 0; font-size: 14px; color: var(--text); }
+  .modal ul { padding-left: 20px; margin: 6px 0; }
+  .close-btn {
+    position: sticky; top: 0; float: right; background: var(--bg); border: 1px solid var(--line);
+    color: var(--text); width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    font-size: 20px; line-height: 1; margin-left: 8px;
+  }
+
+  footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>TimeKeeper — Software-Architektur</h1>
+<p class="lede">
+  Übersicht aller Bausteine unserer AI Foundation Platform. Klicke auf jeden Baustein für eine
+  Erklärung in Alltagssprache — auch für Kollegen ohne Technik-Hintergrund verständlich.
+</p>
+
+<div class="legend">
+  <span><i style="background:var(--accent)"></i> Klickbar — Erklärung öffnen</span>
+  <span><i style="background:var(--ok)"></i> Live im Einsatz</span>
+</div>
+
+<div class="stack">
+
+  <div class="layer">
+    <div class="layer-title">1 · Was der Nutzer sieht</div>
+    <div class="nodes">
+      <button class="node" data-id="browser"><span class="name">Browser / Handy</span><span class="sub">Der Kunde öffnet eine Webseite</span><span class="tag">Frontend</span></button>
+      <button class="node" data-id="vercel"><span class="name">Vercel + Next.js</span><span class="sub">Liefert die Webseite weltweit aus</span><span class="tag">Hosting</span></button>
+      <button class="node" data-id="admin"><span class="name">Admin-Bereich</span><span class="sub">Steuerzentrale für die Agentur</span><span class="tag">UI</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">2 · Türsteher &amp; Anmeldung</div>
+    <div class="nodes">
+      <button class="node" data-id="auth"><span class="name">Supabase Auth</span><span class="sub">Login, Passwörter, Sessions</span><span class="tag">Sicherheit</span></button>
+      <button class="node" data-id="rls"><span class="name">Row Level Security</span><span class="sub">Jeder sieht nur seine Daten</span><span class="tag">Sicherheit</span></button>
+      <button class="node" data-id="tenants"><span class="name">Multi-Tenant</span><span class="sub">Mehrere Kunden, eine Plattform</span><span class="tag">Konzept</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">3 · Daten holen aus Kundensystemen</div>
+    <div class="nodes">
+      <button class="node" data-id="sync"><span class="name">Sync-Funktionen</span><span class="sub">Holen Daten aus ERP/CRM/Kalender</span><span class="tag">Integration</span></button>
+      <button class="node" data-id="retry"><span class="name">Retry &amp; Backoff</span><span class="sub">Versucht es erneut wenn etwas hakt</span><span class="tag">Stabilität</span></button>
+      <button class="node" data-id="ratelimit"><span class="name">Rate Limit</span><span class="sub">Überlastet keine Kunden-API</span><span class="tag">Stabilität</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">4 · Verarbeitungs-Förderband (Queues)</div>
+    <div class="nodes">
+      <button class="node" data-id="pgmq"><span class="name">pgmq Job-Queue</span><span class="sub">Aufgaben in der Warteschlange</span><span class="tag">Förderband</span></button>
+      <button class="node" data-id="worker"><span class="name">Worker</span><span class="sub">Arbeiten die Aufgaben ab</span><span class="tag">Helfer</span></button>
+      <button class="node" data-id="dlq"><span class="name">Dead-Letter-Queue</span><span class="sub">Sammelt Pakete die nicht klappten</span><span class="tag">Notfall</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">5 · Datenlager (Bronze · Silber · Gold)</div>
+    <div class="nodes">
+      <button class="node" data-id="bronze"><span class="name">Bronze: raw_events</span><span class="sub">Rohdaten genau wie geliefert</span><span class="tag">Lager</span></button>
+      <button class="node" data-id="silver"><span class="name">Silber: entities_*</span><span class="sub">Aufgeräumt &amp; sortiert</span><span class="tag">Lager</span></button>
+      <button class="node" data-id="gold"><span class="name">Gold: embeddings</span><span class="sub">Suchbar für die KI</span><span class="tag">Lager</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">6 · KI &amp; Suche</div>
+    <div class="nodes">
+      <button class="node" data-id="chat"><span class="name">Chat-Assistent</span><span class="sub">Beantwortet Fragen zu Kundendaten</span><span class="tag">KI</span></button>
+      <button class="node" data-id="phone"><span class="name">Telefon-Assistent</span><span class="sub">Bucht Termine am Telefon</span><span class="tag">KI</span></button>
+      <button class="node" data-id="search"><span class="name">Hybrid-Suche</span><span class="sub">Findet passende Inhalte</span><span class="tag">Suche</span></button>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-title">7 · Überwachung &amp; Steuerung</div>
+    <div class="nodes">
+      <button class="node" data-id="runs"><span class="name">Integration Runs</span><span class="sub">Protokoll jedes Datenabholens</span><span class="tag">Monitoring</span></button>
+      <button class="node" data-id="kpi"><span class="name">KPI-Dashboard</span><span class="sub">Zeigt ob alles gesund läuft</span><span class="tag">Monitoring</span></button>
+      <button class="node" data-id="cron"><span class="name">pg_cron Zeitplaner</span><span class="sub">Startet Jobs automatisch</span><span class="tag">Automatik</span></button>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Stand: April 2026 · TimeKeeper AI Foundation Platform · Klick auf einen Baustein für die Erklärung
+</footer>
+</div>
+
+<!-- Modal -->
+<div class="backdrop" id="backdrop" role="dialog" aria-modal="true">
+  <div class="modal" id="modal">
+    <button class="close-btn" id="close" aria-label="Schließen">×</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const EXPLAINERS = {
+  browser: {
+    title: "Browser / Handy",
+    role: "Was der Kunde sieht",
+    body: `
+      <p>Das ist alles, was unsere Kunden tatsächlich zu Gesicht bekommen: eine Webseite, die im Browser am Laptop oder als App-artige Oberfläche am Handy läuft. Mehr nicht.</p>
+      <div class="analogie"><strong>Analogie:</strong> Stell dir TimeKeeper wie ein Restaurant vor. Der Browser ist der Tisch, an dem der Gast sitzt. Alles andere — Küche, Vorratskammer, Lieferanten — ist im Hintergrund.</div>
+      <h4>Wichtig zu wissen</h4>
+      <ul><li>Funktioniert auf jedem modernen Gerät</li><li>Komplett auf Deutsch</li><li>Hell- und Dunkel-Modus automatisch</li></ul>`
+  },
+  vercel: {
+    title: "Vercel + Next.js",
+    role: "Liefert die Webseite aus",
+    body: `
+      <p>Vercel ist der Anbieter, der unsere Webseite bei sich „hostet" — also auf seinen Computern weltweit bereitstellt. Next.js ist das Werkzeug, mit dem die Webseite gebaut ist.</p>
+      <div class="analogie"><strong>Analogie:</strong> Vercel ist die Druckerei und der Lieferdienst der Speisekarte. Egal ob ein Gast aus Berlin, München oder New York reinkommt — die Karte liegt sofort am Tisch.</div>
+      <h4>Vorteile</h4>
+      <ul><li>Automatisches Deployment: Code-Änderung → 30 Sekunden später live</li><li>Schnell weltweit, weil über viele Server verteilt</li><li>Wir müssen keine Server selbst betreiben</li></ul>`
+  },
+  admin: {
+    title: "Admin-Bereich",
+    role: "Steuerzentrale der Agentur",
+    body: `
+      <p>Ein eigener, geschützter Bereich, den nur die Agentur sieht. Hier verwalten wir Kunden, schalten Funktionen frei, sehen alle laufenden Datenabgleiche und können Fehler reparieren.</p>
+      <div class="analogie"><strong>Analogie:</strong> Das ist die Restaurantküche mit Kontrollzentrum. Der Gast sieht sie nie, aber von hier aus läuft alles.</div>
+      <h4>Was hier möglich ist</h4>
+      <ul><li>Neue Kunden anlegen und Pläne zuweisen</li><li>Funktionen ein- und ausschalten</li><li>Sehen welche Sync-Läufe gerade laufen</li><li>Fehlgeschlagene Jobs mit einem Klick neu starten</li></ul>`
+  },
+  auth: {
+    title: "Supabase Auth",
+    role: "Anmeldung & Passwörter",
+    body: `
+      <p>Kümmert sich darum, dass nur die richtigen Leute reinkommen. Speichert Passwörter sicher verschlüsselt und stellt sicher, dass eine Login-Sitzung gültig ist.</p>
+      <div class="analogie"><strong>Analogie:</strong> Der Türsteher mit Gästeliste. Ohne Einladung kommt niemand rein. Und ein Gast bleibt nur so lange drin, wie sein Bändchen gültig ist.</div>
+      <h4>Was es kann</h4>
+      <ul><li>E-Mail + Passwort, Magic Links, später auch Google/Microsoft Login</li><li>Passwort-Zurücksetzen per E-Mail</li><li>Sichere Sessions, die nach Inaktivität ablaufen</li></ul>`
+  },
+  rls: {
+    title: "Row Level Security",
+    role: "Datenschutz auf Datenbank-Ebene",
+    body: `
+      <p>Eine Sicherheits-Schicht direkt in der Datenbank. Sie sorgt dafür, dass selbst wenn ein Programmierfehler in der App passiert, Kunde A niemals Daten von Kunde B sehen kann. Die Datenbank verweigert es einfach.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie ein Tresor mit individuellen Schließfächern. Selbst wenn der Bankangestellte den falschen Schlüssel hineinsteckt, öffnet sich nur das eigene Fach.</div>
+      <h4>Warum so wichtig</h4>
+      <ul><li>Doppeltes Sicherheitsnetz neben dem Login</li><li>Regulatorisch wichtig: DSGVO-konform</li><li>Schützt uns vor unseren eigenen Fehlern</li></ul>`
+  },
+  tenants: {
+    title: "Multi-Tenant",
+    role: "Eine Plattform, viele Kunden",
+    body: `
+      <p>Statt für jeden Kunden eine eigene Software zu installieren, betreiben wir eine einzige Plattform für alle. Jeder Kunde ist ein „Tenant" (Mieter) mit eigenem Bereich.</p>
+      <div class="analogie"><strong>Analogie:</strong> Ein Bürohaus mit vielen Firmen. Jede hat ihre eigene Tür, eigene Räume, eigene Schlösser — aber Heizung, Strom und Aufzug sind gemeinsam.</div>
+      <h4>Was wir davon haben</h4>
+      <ul><li>Neue Kunden in Minuten statt Wochen</li><li>Alle profitieren sofort von neuen Funktionen</li><li>Wir wartet eine Plattform statt 50</li></ul>`
+  },
+  sync: {
+    title: "Sync-Funktionen",
+    role: "Datenabholer aus Kundensystemen",
+    body: `
+      <p>Kleine Programme, die bei Kunden-Systemen (ERP, CRM, Kalender, Buchhaltung) anfragen und die Daten zu uns holen. Pro Kundensystem gibt es einen eigenen Sync.</p>
+      <div class="analogie"><strong>Analogie:</strong> Kuriere, die bei verschiedenen Lieferanten Pakete abholen und ins Lager bringen. Jeder Kurier kennt nur „seinen" Lieferanten und dessen Eigenheiten.</div>
+      <h4>Aktuell live</h4>
+      <ul><li><strong>Google Calendar</strong> — holt Termine alle 15 Minuten</li><li>Geplant: HubSpot, SAP, DATEV, Pipedrive, etc.</li></ul>`
+  },
+  retry: {
+    title: "Retry & Backoff",
+    role: "Wiederholt fehlgeschlagene Versuche",
+    body: `
+      <p>Wenn ein Kundensystem mal kurz nicht antwortet, gibt unser Sync nicht sofort auf. Er wartet kurz, versucht es nochmal, wartet länger, versucht es nochmal — bis es klappt oder klar ist, dass es wirklich kaputt ist.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wenn jemand nicht ans Telefon geht, ruft man nicht 50 Mal direkt hintereinander an. Man wartet 5 Minuten, dann 15, dann eine halbe Stunde. Das ist „exponentielles Backoff".</div>
+      <h4>Warum wichtig</h4>
+      <ul><li>Kunden-APIs haben oft kurze Hänger — wir merken nichts davon</li><li>Wenn die andere Seite uns „bitte langsamer" sagt, halten wir uns dran</li><li>Erst nach mehreren Versuchen markieren wir es als Fehler</li></ul>`
+  },
+  ratelimit: {
+    title: "Rate Limit",
+    role: "Schützt Kunden-Systeme vor Überlastung",
+    body: `
+      <p>Jedes Kundensystem erlaubt nur eine bestimmte Anzahl Anfragen pro Minute. Unser „Token Bucket" zählt mit und bremst uns automatisch ab, bevor wir gesperrt werden.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie eine Eintrittsmarken-Kasse im Schwimmbad. Pro Minute werden 10 Marken ausgegeben. Sind keine da, wartet man kurz an der Kasse. Niemand stürmt das Becken.</div>
+      <h4>Vorteile</h4>
+      <ul><li>Wir werden nie wegen Überlastung gesperrt</li><li>Pro Kunde + Provider individuelles Budget</li><li>Mehrere Worker teilen sich das Budget fair</li></ul>`
+  },
+  pgmq: {
+    title: "pgmq Job-Queue",
+    role: "Förderband zwischen den Verarbeitungsschritten",
+    body: `
+      <p>Eine Warteschlange in der Datenbank. Jede Aufgabe (z.B. „normalisiere diesen Termin") wird als kleines Päckchen reingelegt und wartet, bis ein freier Worker es abholt.</p>
+      <div class="analogie"><strong>Analogie:</strong> Das Förderband in einer Sushi-Bar. Köche legen Teller drauf, Gäste nehmen sie ab. Niemand muss auf den anderen warten — beide arbeiten in ihrem eigenen Tempo.</div>
+      <h4>Vier Förderbänder bei uns</h4>
+      <ul><li><strong>ingest</strong> — neue Daten reingekommen</li><li><strong>normalize</strong> — bitte aufräumen</li><li><strong>embed</strong> — bitte für die KI vorbereiten</li><li><strong>index</strong> — bitte suchbar machen</li></ul>`
+  },
+  worker: {
+    title: "Worker",
+    role: "Die Helfer am Förderband",
+    body: `
+      <p>Programme, die ständig auf dem Förderband nachschauen, ein Päckchen nehmen, die Aufgabe erledigen und „erledigt" zurückmelden. Mehrere Worker können parallel arbeiten.</p>
+      <div class="analogie"><strong>Analogie:</strong> Die Köche an der Sushi-Bar. Wenn viel los ist, stellt man mehr Köche an die Theke. Jeder nimmt sich den nächsten Auftrag und arbeitet ihn ab.</div>
+      <h4>Was sie tun</h4>
+      <ul><li>Aufgabe holen, erledigen, Erfolg melden</li><li>Bei Fehler: zurück aufs Band, später erneut versuchen</li><li>Nach mehreren Fehlversuchen: in die Notfall-Liste (siehe Dead-Letter)</li></ul>`
+  },
+  dlq: {
+    title: "Dead-Letter-Queue",
+    role: "Notfall-Liste für hartnäckige Fehler",
+    body: `
+      <p>Wenn ein Päckchen auch nach mehreren Versuchen nicht verarbeitet werden kann, landet es hier. Wir sehen es im Admin-Bereich und können es nach einer Reparatur mit einem Klick erneut starten.</p>
+      <div class="analogie"><strong>Analogie:</strong> Der Tisch im Restaurant, auf dem Bestellungen mit Problemen landen („Gast hat doch keine Erdnüsse" — Küchenchef schaut drüber, korrigiert, schickt zurück).</div>
+      <h4>Warum wichtig</h4>
+      <ul><li>Nichts geht verloren — alles ist sichtbar</li><li>Berater kann manuell eingreifen</li><li>Ein-Klick-Wiederholung ohne Programmierer</li></ul>`
+  },
+  bronze: {
+    title: "Bronze · raw_events",
+    role: "Rohdaten-Lager",
+    body: `
+      <p>Hier landet jeder Datensatz, den wir je von einem Kundensystem geholt haben — exakt wie er geliefert wurde, ohne Veränderung. Diese Daten ändern wir nie.</p>
+      <div class="analogie"><strong>Analogie:</strong> Das Wareneingangsbuch im Lager. Was reinkommt, wird mit Datum und Lieferant abgestempelt und kommt ins Regal. Auch wenn später jemand anderes weiterverarbeitet — das Original bleibt.</div>
+      <h4>Vorteile</h4>
+      <ul><li>Wir können jederzeit alles neu verarbeiten — ohne den Kunden nochmal zu belasten</li><li>Bei Fehlern können wir nachvollziehen, was geliefert wurde</li><li>Monatlich automatisch in Schubladen sortiert (Partitionen) — bleibt schnell</li></ul>`
+  },
+  silver: {
+    title: "Silber · entities_*",
+    role: "Aufgeräumte, einheitliche Daten",
+    body: `
+      <p>Hier liegen die Rohdaten in aufgeräumter Form: einheitliche Felder, geprüfte Datentypen, Duplikate entfernt. Egal ob der Termin ursprünglich aus Google, Outlook oder Apple kam — bei uns sieht er gleich aus.</p>
+      <div class="analogie"><strong>Analogie:</strong> Die Vorratskammer im Restaurant. Tomaten landen in der Tomaten-Kiste — egal ob sie als Karton, Netz oder Eimer geliefert wurden. So findet der Koch alles sofort.</div>
+      <h4>Vorteile</h4>
+      <ul><li>App und KI müssen nur ein Format kennen, nicht zehn</li><li>Berichte über Systeme hinweg sind möglich</li><li>Neue Datenquellen werden einfach eingehängt</li></ul>`
+  },
+  gold: {
+    title: "Gold · Embeddings",
+    role: "KI-lesbare Daten",
+    body: `
+      <p>Hier werden die Daten in eine Form gebracht, die unsere KI verstehen kann — quasi in „mathematische Beschreibungen" der Bedeutung. Damit findet die KI auch dann etwas, wenn man nicht das exakte Wort verwendet.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie ein Bibliothekar, der jedes Buch nicht nur nach Titel sortiert, sondern auch nach Thema, Stimmung und Stil. Wenn jemand fragt „etwas Spannendes über Detektive im Regen", findet er auch „Sherlock Holmes".</div>
+      <h4>Was es ermöglicht</h4>
+      <ul><li>Semantische Suche statt nur Stichwort-Suche</li><li>Chat-Antworten mit echten Quellen aus Kundendaten</li><li>Entscheidungs-Vorlagen aus historischen Fällen</li></ul>`
+  },
+  chat: {
+    title: "Chat-Assistent",
+    role: "KI-Assistent für Kundendaten",
+    body: `
+      <p>Beantwortet Fragen in natürlicher Sprache und stützt seine Antworten auf die echten Kundendaten aus dem Datenlager. Kein Halluzinieren — jede Aussage hat eine Quelle.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie ein neuer Mitarbeiter, der das gesamte Firmenarchiv im Kopf hat und auf jede Frage antworten kann — und immer dazu sagt, in welchem Aktenordner es steht.</div>
+      <h4>Was er kann</h4>
+      <ul><li>„Welche Rechnungen sind diesen Monat offen?"</li><li>„Wann war der letzte Termin mit Firma X?"</li><li>„Fasse mir die letzten 3 Projekte mit Kunde Y zusammen"</li></ul>`
+  },
+  phone: {
+    title: "Telefon-Assistent",
+    role: "Bucht Termine am Telefon",
+    body: `
+      <p>Eine eigene Telefonnummer pro Kunde. Wenn jemand anruft, hebt eine KI ab, versteht das Anliegen, schlägt Termine vor und trägt sie direkt im Kalender ein.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie eine Empfangsdame, die nie krank wird, nie Pause macht und 100 Anrufe gleichzeitig annehmen kann.</div>
+      <h4>Wie es funktioniert</h4>
+      <ul><li>Anruf kommt rein → KI hebt ab</li><li>Spricht natürlich auf Deutsch</li><li>Prüft echten Google-Kalender auf freie Slots</li><li>Bestätigt per E-Mail</li></ul>`
+  },
+  search: {
+    title: "Hybrid-Suche",
+    role: "Findet Inhalte schnell und schlau",
+    body: `
+      <p>Kombiniert klassische Stichwort-Suche („genau dieses Wort") mit semantischer Suche („irgendwas in dieser Bedeutung"). Beides zusammen liefert die besten Treffer.</p>
+      <div class="analogie"><strong>Analogie:</strong> Eine Bibliothekarin, die sowohl den Buchtitel googelt als auch nach Thema vorschlägt. Wenn du „Buch über Hunde" sagst, findet sie auch „Bello und seine Freunde".</div>
+      <h4>Warum hybrid</h4>
+      <ul><li>Stichwort allein verfehlt Synonyme</li><li>Bedeutung allein verfehlt exakte Namen / Nummern</li><li>Zusammen: präzise und umfassend</li></ul>`
+  },
+  runs: {
+    title: "Integration Runs",
+    role: "Protokoll jedes Datenabholens",
+    body: `
+      <p>Bei jedem einzelnen Sync-Lauf wird festgehalten: Wann gestartet, wann fertig, wie viele Datensätze, wie viele Fehler, wie lange gedauert. So sehen wir sofort wenn etwas schief läuft.</p>
+      <div class="analogie"><strong>Analogie:</strong> Wie das Kassenbuch im Restaurant. Am Ende des Tages weiß man genau: 47 Tische bedient, 3 Reklamationen, durchschnittlich 12 Minuten Wartezeit.</div>
+      <h4>Was es uns gibt</h4>
+      <ul><li>Beweis gegenüber Kunden: „Eure Daten sind gestern um 14:32 Uhr aktualisiert worden"</li><li>Frühwarnung wenn ein Sync auf einmal langsamer wird</li><li>Basis für die KPI-Auswertung</li></ul>`
+  },
+  kpi: {
+    title: "KPI-Dashboard",
+    role: "Gesundheits-Anzeige der Plattform",
+    body: `
+      <p>Eine Übersicht im Admin-Bereich, die auf einen Blick zeigt: Wie viele Sync-Läufe, wie viele Erfolge, wie viele Fehler, wie viele Datensätze in den letzten 14 Tagen.</p>
+      <div class="analogie"><strong>Analogie:</strong> Das Cockpit-Display im Auto. Tankstand, Geschwindigkeit, Motortemperatur — alles auf einen Blick. Nicht alles im Detail, aber genug um zu wissen ob die Reise gut läuft.</div>
+      <h4>Wer sieht es</h4>
+      <ul><li>Nur die Agentur (Admin-Bereich) — nicht der Kunde</li><li>Berater entscheidet pro Kunde, was davon weitergegeben wird</li></ul>`
+  },
+  cron: {
+    title: "pg_cron Zeitplaner",
+    role: "Startet Jobs automatisch",
+    body: `
+      <p>Eine Uhr in der Datenbank, die zu festgelegten Zeiten Programme anstößt. Niemand muss manuell auf einen Knopf drücken — der Zeitplaner kümmert sich.</p>
+      <div class="analogie"><strong>Analogie:</strong> Der Wecker im Restaurant, der den Bäcker um 4 Uhr aufweckt. Niemand muss daran denken — es passiert von selbst.</div>
+      <h4>Aktuelle Zeitpläne</h4>
+      <ul><li>Alle <strong>15 Minuten</strong>: Google-Calendar-Sync für alle aktiven Kunden</li><li>Alle <strong>30 Sekunden</strong>: Worker leert das Förderband</li><li>Täglich <strong>2 Uhr nachts</strong>: neue Lager-Schubladen für den nächsten Monat anlegen</li></ul>`
+  },
+};
+
+const backdrop = document.getElementById('backdrop');
+const body     = document.getElementById('modal-body');
+const close    = document.getElementById('close');
+
+function open(id) {
+  const e = EXPLAINERS[id];
+  if (!e) return;
+  body.innerHTML = `<h3>${e.title}</h3><div class="role">${e.role}</div>${e.body}`;
+  backdrop.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function shut() {
+  backdrop.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.querySelectorAll('.node').forEach(n => {
+  n.addEventListener('click', () => open(n.dataset.id));
+});
+close.addEventListener('click', shut);
+backdrop.addEventListener('click', e => { if (e.target === backdrop) shut(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') shut(); });
+</script>
+</body>
+</html>

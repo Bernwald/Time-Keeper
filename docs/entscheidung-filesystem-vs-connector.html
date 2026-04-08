@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeKeeper — Entscheidung: Eigenes Filesystem oder Connector?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-bg-elevated: #f1f5f9;
+    --color-panel: #ffffff;
+    --color-line: #e2e8f0;
+    --color-line-soft: #f1f5f9;
+    --color-text: #0f172a;
+    --color-text-secondary: #334155;
+    --color-muted: #64748b;
+    --color-accent: #0d9488;
+    --color-accent-hover: #0f766e;
+    --color-accent-soft: #ccfbf1;
+    --color-accent-text: #ffffff;
+    --color-danger: #ef4444;
+    --color-danger-soft: #fef2f2;
+    --color-warning: #f59e0b;
+    --color-warning-soft: #fffbeb;
+    --color-success: #10b981;
+    --color-success-soft: #ecfdf5;
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "DM Sans", system-ui, sans-serif;
+    --radius-xs: 6px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-card: 16px;
+    --radius-full: 9999px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-card: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #0c0f17;
+      --color-bg-elevated: #151925;
+      --color-panel: #1a1f2e;
+      --color-line: #2a3040;
+      --color-line-soft: #1e2435;
+      --color-text: #f1f5f9;
+      --color-text-secondary: #cbd5e1;
+      --color-muted: #94a3b8;
+      --color-accent: #14b8a6;
+      --color-accent-hover: #2dd4bf;
+      --color-accent-soft: #0d3d38;
+      --color-danger: #f87171;
+      --color-danger-soft: #3b1111;
+      --color-warning: #fbbf24;
+      --color-warning-soft: #3b2a06;
+      --color-success: #34d399;
+      --color-success-soft: #052e1c;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+      --shadow-card: 0 4px 6px -1px rgba(0,0,0,.3), 0 2px 4px -2px rgba(0,0,0,.2);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100dvh;
+    background: var(--color-bg); color: var(--color-text);
+    font-family: var(--font-body); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 16px 96px; }
+
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 10px; border-radius: var(--radius-full);
+    background: var(--color-accent-soft); color: var(--color-accent);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 600;
+    font-size: 40px; line-height: 1.1; letter-spacing: -0.02em;
+    margin: 0 0 12px;
+  }
+  h2 {
+    font-family: var(--font-display); font-weight: 600;
+    font-size: 26px; line-height: 1.25; letter-spacing: -0.01em;
+    margin: 56px 0 12px;
+  }
+  h3 {
+    font-family: var(--font-display); font-weight: 600;
+    font-size: 18px; margin: 0 0 4px; letter-spacing: -0.005em;
+  }
+  p.lede {
+    color: var(--color-text-secondary); margin: 0 0 8px;
+    max-width: 720px; font-size: 17px;
+  }
+
+  /* Kontext-Box */
+  .context {
+    background: var(--color-panel); border: 1px solid var(--color-line);
+    border-left: 4px solid var(--color-accent); border-radius: var(--radius-md);
+    padding: 20px 24px; margin: 24px 0 8px;
+    box-shadow: var(--shadow-sm);
+  }
+  .context strong { color: var(--color-accent); }
+
+  /* Optionen-Grid */
+  .options {
+    display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 20px;
+  }
+  @media (min-width: 900px) { .options { grid-template-columns: repeat(3, 1fr); } }
+
+  .option {
+    background: var(--color-panel); border: 1px solid var(--color-line);
+    border-radius: var(--radius-card); padding: 24px;
+    box-shadow: var(--shadow-card); display: flex; flex-direction: column;
+    position: relative;
+  }
+  .option.recommended {
+    border-color: var(--color-accent); border-width: 2px;
+  }
+  .option .ribbon {
+    position: absolute; top: -10px; right: 16px;
+    background: var(--color-accent); color: var(--color-accent-text);
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; padding: 4px 10px; border-radius: var(--radius-full);
+  }
+  .option .label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--color-muted); margin-bottom: 4px;
+  }
+  .option .summary {
+    font-size: 13px; color: var(--color-text-secondary); margin: 8px 0 16px;
+  }
+
+  .pro-list, .contra-list {
+    list-style: none; padding: 0; margin: 0 0 16px; font-size: 13px;
+  }
+  .pro-list li, .contra-list li {
+    padding: 6px 0 6px 22px; position: relative; color: var(--color-text-secondary); line-height: 1.5;
+  }
+  .pro-list li::before {
+    content: "✓"; position: absolute; left: 0; top: 6px;
+    color: var(--color-success); font-weight: 700;
+  }
+  .contra-list li::before {
+    content: "✕"; position: absolute; left: 0; top: 6px;
+    color: var(--color-danger); font-weight: 700;
+  }
+  .section-head {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--color-muted);
+    margin: 12px 0 6px; padding-top: 12px; border-top: 1px solid var(--color-line-soft);
+  }
+  .section-head:first-of-type { padding-top: 0; border-top: none; margin-top: 0; }
+
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    margin-top: auto; padding-top: 16px; border-top: 1px solid var(--color-line-soft);
+  }
+  .meta-item {
+    background: var(--color-bg-elevated); border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .meta-item .k {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--color-muted); font-weight: 600;
+  }
+  .meta-item .v {
+    font-size: 13px; font-weight: 600; color: var(--color-text); margin-top: 2px;
+  }
+
+  /* Empfehlung */
+  .recommendation {
+    background: var(--color-accent-soft); border: 1px solid var(--color-accent);
+    border-radius: var(--radius-card); padding: 28px;
+    margin-top: 24px;
+  }
+  .recommendation h3 {
+    color: var(--color-accent); margin-bottom: 12px;
+  }
+  .recommendation p {
+    color: var(--color-text); margin: 8px 0; font-size: 15px;
+  }
+
+  /* Aktion-Liste */
+  .actions-list {
+    background: var(--color-panel); border: 1px solid var(--color-line);
+    border-radius: var(--radius-card); padding: 24px; box-shadow: var(--shadow-card);
+  }
+  .actions-list ol { padding-left: 20px; margin: 0; }
+  .actions-list li {
+    margin-bottom: 12px; font-size: 14px; color: var(--color-text-secondary);
+  }
+  .actions-list li strong { color: var(--color-text); }
+
+  /* Offene Fragen */
+  .questions {
+    display: grid; grid-template-columns: 1fr; gap: 12px;
+  }
+  @media (min-width: 720px) { .questions { grid-template-columns: 1fr 1fr; } }
+  .question-card {
+    background: var(--color-panel); border: 1px solid var(--color-line);
+    border-radius: var(--radius-md); padding: 18px 20px;
+  }
+  .question-card .q {
+    font-weight: 600; color: var(--color-text); font-size: 14px; margin-bottom: 4px;
+  }
+  .question-card .h {
+    font-size: 12px; color: var(--color-muted); line-height: 1.5;
+  }
+
+  footer {
+    margin-top: 56px; text-align: center;
+    color: var(--color-muted); font-size: 12px;
+  }
+
+  /* Print */
+  @media print {
+    body { background: #fff; color: #000; }
+    .wrap { padding: 16px; max-width: none; }
+    .option, .recommendation, .actions-list, .question-card, .context {
+      box-shadow: none; break-inside: avoid;
+    }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<span class="badge">Strategie-Entscheidung · April 2026</span>
+<h1>Eigenes Filesystem oder Connector?</h1>
+<p class="lede">
+  Entscheidungsvorlage zur Diskussion mit dem Mitgründer: Wie lösen wir das Edit/Delete- und
+  Veraltungsproblem unserer hochgeladenen Dokumente — bauen wir ein eigenes RAG-natives
+  Filesystem oder docken wir an SharePoint und Google Drive an?
+</p>
+
+<!-- ============ KONTEXT ============ -->
+<div class="context">
+  <strong>Ausgangslage:</strong> Hochgeladene Dokumente in unserer Plattform können aktuell
+  nicht bearbeitet oder gelöscht werden. Zugleich veralten sie sofort, sobald die Originaldatei
+  außerhalb unserer Struktur (z. B. in SharePoint) bearbeitet wird. Wir müssen entscheiden,
+  ob wir <em>Storage selbst besitzen</em> oder <em>als Layer auf bestehende Systeme aufsetzen</em>.
+</div>
+
+<!-- ============ DREI OPTIONEN ============ -->
+<h2>Drei Optionen im Vergleich</h2>
+
+<div class="options">
+
+  <!-- Option A -->
+  <div class="option">
+    <div class="label">Option A</div>
+    <h3>Eigenes RAG-Filesystem</h3>
+    <p class="summary">
+      Wir bauen einen eigenen Storage-Layer mit Versionierung, Permissions, Edit/Delete
+      und Volltext/Semantik-Suche von Grund auf.
+    </p>
+
+    <div class="section-head">Pro</div>
+    <ul class="pro-list">
+      <li>Volle Kontrolle über Chunking, Re-Embedding, ACLs, Audit</li>
+      <li>RAG-Qualität wird zum Produktvorteil</li>
+      <li>Native Schreibpfade für Agenten (Telefon, Coding)</li>
+      <li>Differenzierung gegenüber „noch ein RAG-Wrapper"</li>
+    </ul>
+
+    <div class="section-head">Contra</div>
+    <ul class="contra-list">
+      <li>Konkurrenz: SharePoint ist im M365-Abo enthalten (gratis)</li>
+      <li>Migration der Bestandsdaten = Killer-Argument beim Kunden</li>
+      <li>Compliance: DSGVO, eDiscovery, Retention sind eigene Produkte</li>
+      <li>Office-Co-Authoring, Locking, Mobile, Offline = 20 Jahre Engineering</li>
+      <li>Vertrauen (ISO, AVV, Pen-Test) braucht Monate bis Jahre</li>
+    </ul>
+
+    <div class="meta-grid">
+      <div class="meta-item"><div class="k">Aufwand</div><div class="v">Sehr hoch</div></div>
+      <div class="meta-item"><div class="k">Risiko</div><div class="v">Hoch</div></div>
+      <div class="meta-item"><div class="k">Time-to-Value</div><div class="v">6–12 Mon.</div></div>
+      <div class="meta-item"><div class="k">Lock-in</div><div class="v">Stark</div></div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option">
+    <div class="label">Option B</div>
+    <h3>Connector zu SharePoint &amp; Drive</h3>
+    <p class="summary">
+      Wir lesen kontinuierlich aus den bestehenden Systemen des Kunden (Delta-Sync) und
+      schreiben Änderungen über deren APIs zurück. Kein eigener Storage.
+    </p>
+
+    <div class="section-head">Pro</div>
+    <ul class="pro-list">
+      <li>Kunde bleibt wo er ist — kein Migration-Schmerz</li>
+      <li>Delta-APIs lösen das Veraltungsproblem strukturell</li>
+      <li>Edit/Delete via PATCH/DELETE gegen Graph API</li>
+      <li>IT-Freigabe leichter, Daten bleiben „at source"</li>
+      <li>Passt zu unserer Agency-Vision: anbinden statt ersetzen</li>
+    </ul>
+
+    <div class="section-head">Contra</div>
+    <ul class="contra-list">
+      <li>Wir erben Limits (Rate Limits, Permission-Modelle)</li>
+      <li>Weniger Lock-in — austauschbarer Layer</li>
+      <li>Schreibpfade an Graph-API-Möglichkeiten gebunden</li>
+      <li>Schlechte Metadaten in Quellsystemen schlagen durch</li>
+    </ul>
+
+    <div class="meta-grid">
+      <div class="meta-item"><div class="k">Aufwand</div><div class="v">Mittel</div></div>
+      <div class="meta-item"><div class="k">Risiko</div><div class="v">Niedrig</div></div>
+      <div class="meta-item"><div class="k">Time-to-Value</div><div class="v">4–8 Wo.</div></div>
+      <div class="meta-item"><div class="k">Lock-in</div><div class="v">Schwach</div></div>
+    </div>
+  </div>
+
+  <!-- Option C — Empfehlung -->
+  <div class="option recommended">
+    <span class="ribbon">Empfehlung</span>
+    <div class="label">Option C</div>
+    <h3>Hybrid: Connector + eigener Bucket</h3>
+    <p class="summary">
+      Connector-First für SharePoint/Drive, mit unserem bestehenden <code>source-files</code>-Bucket
+      als Fallback-Backend hinter demselben Interface. Ein API, zwei Backends.
+    </p>
+
+    <div class="section-head">Pro</div>
+    <ul class="pro-list">
+      <li>Kombiniert die Stärken beider Welten</li>
+      <li>Kunden ohne M365 / Workspace nutzen unseren Bucket</li>
+      <li>Connector-Kunden profitieren vom selben UI &amp; Workflow</li>
+      <li>Chunks als first-class Objekte sind das eigentliche IP</li>
+      <li>Bestehende Pipeline (Bronze/Silver/Gold) bleibt unverändert</li>
+    </ul>
+
+    <div class="section-head">Contra</div>
+    <ul class="contra-list">
+      <li>Zwei Backends erfordern saubere Abstraktion</li>
+      <li>Doppelte Test-Matrix für beide Pfade</li>
+    </ul>
+
+    <div class="meta-grid">
+      <div class="meta-item"><div class="k">Aufwand</div><div class="v">Mittel</div></div>
+      <div class="meta-item"><div class="k">Risiko</div><div class="v">Niedrig</div></div>
+      <div class="meta-item"><div class="k">Time-to-Value</div><div class="v">6–10 Wo.</div></div>
+      <div class="meta-item"><div class="k">Lock-in</div><div class="v">Mittel</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ EMPFEHLUNG ============ -->
+<h2>Unsere Empfehlung</h2>
+
+<div class="recommendation">
+  <h3>Connector-First, mit eigenem Bucket als Fallback</h3>
+  <p>
+    <strong>Das eigentliche Problem ist kein Storage-Problem, sondern ein Sync-Problem.</strong>
+    Wir können aus unserer UI heute schon <code>PATCH /drives/{id}/items/{id}</code> gegen
+    Microsoft Graph callen und SharePoint-Files bearbeiten — wir brauchen keinen eigenen Bucket
+    dafür. Wir brauchen einen Connector mit Schreibrechten und Delta-Sync.
+  </p>
+  <p>
+    Geschwindigkeit im Bauen ist das schwächste Argument für ein eigenes Filesystem:
+    Migration, Vertrauen und Compliance kosten Monate bis Jahre — egal wie schnell wir tippen.
+    Mit dem Connector-Pfad sind wir in 6–10 Wochen produktiv und lösen 90 % des Schmerzes.
+  </p>
+  <p>
+    Unser eigentliches IP — <strong>Chunks als first-class Objekte mit Versionierung</strong>,
+    die Bronze/Silver/Gold-Pipeline und der Chat mit Citations — funktioniert bei beiden
+    Backends. Wir verlieren also nichts und gewinnen Time-to-Value.
+  </p>
+</div>
+
+<!-- ============ KONKRETE SCHRITTE ============ -->
+<h2>Was wir konkret tun</h2>
+<p class="lede" style="font-size:14px;">
+  Vollständiger Implementierungsplan in <code>docs/ui-skizze-kundenworkflow.html</code>.
+  Hier die kritische Reihenfolge.
+</p>
+
+<div class="actions-list">
+  <ol>
+    <li><strong>Schema-Migration:</strong> <code>sources</code> + <code>chunk_versions</code> als first-class Tabellen</li>
+    <li><strong>SharePoint-Connector (read-only):</strong> beweist Sync-Hypothese</li>
+    <li><strong>Chat-UI mit Citations + Drilldown:</strong> beweist UX-Hypothese</li>
+    <li><strong>Writeback-Connector:</strong> löst das eigentliche Edit/Delete-Problem</li>
+    <li><strong>Quellen- &amp; Wissens-UI:</strong> Connector-Status + Entity-Bearbeitung</li>
+    <li><strong>Admin-KPIs:</strong> Sync-Health im Berater-Bereich</li>
+    <li><strong>Zweiter Connector (Google Drive):</strong> erst wenn SharePoint stabil läuft</li>
+  </ol>
+</div>
+
+<!-- ============ OFFENE FRAGEN ============ -->
+<h2>Offene Fragen für die Diskussion</h2>
+
+<div class="questions">
+  <div class="question-card">
+    <div class="q">Welcher Connector zuerst — SharePoint oder Google Drive?</div>
+    <div class="h">Mittelstand-Annahme spricht für SharePoint, aber unsere Pilot-Kunden könnten anders aussehen.</div>
+  </div>
+  <div class="question-card">
+    <div class="q">Wie weit gehen wir mit Writeback?</div>
+    <div class="h">Nur Edit/Delete oder auch neues Erstellen aus der Plattform heraus?</div>
+  </div>
+  <div class="question-card">
+    <div class="q">Wer trägt die Compliance-Verantwortung?</div>
+    <div class="h">Bei Connector-First bleibt sie beim Kunden — bei eigenem FS bei uns.</div>
+  </div>
+  <div class="question-card">
+    <div class="q">Brauchen wir einen Pilot-Kunden ohne M365?</div>
+    <div class="h">Nur dann müssen wir den eigenen Bucket aktiv vermarkten statt nur als Fallback.</div>
+  </div>
+</div>
+
+<footer>
+  TimeKeeper AI Foundation Platform · Stand April 2026 · Diskussionsgrundlage für die Mitgründer-Entscheidung
+</footer>
+</div>
+</body>
+</html>

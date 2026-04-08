@@ -1,0 +1,7 @@
+project_id = "atguaothhmndqofrlaux"
+
+[functions.phone-assistant-rag]
+verify_jwt = false
+
+[functions.phone-assistant-call-complete]
+verify_jwt = false
