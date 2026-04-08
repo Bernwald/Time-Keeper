@@ -9,6 +9,8 @@ import {
   boostedHybridSearch,
   chunksBySourceIds,
   searchOperationalEntities,
+  listAllChunksByType,
+  type ChunkSearchResult,
 } from "@/lib/db/queries/search";
 import { resolveEntities, getBoostSourceIds } from "@/lib/ai/entity-resolver";
 import {
@@ -38,7 +40,42 @@ export type StoredMessage = {
 };
 
 const RETRIEVAL_LIMIT = 14; // bumped from 6 — listing-questions need headroom
+const LISTING_LIMIT   = 80; // exhaustive fetch for "alle ..."-style questions
 const HISTORY_WINDOW  = 10; // last N turns sent to the model
+
+// Detects listing/counting questions where we must bypass relevance ranking
+// and fetch every matching row, otherwise long transcripts crowd out short
+// entity-sources and we silently drop contacts/companies.
+function detectListingIntent(q: string): {
+  isListing: boolean;
+  types: string[];
+} {
+  const s = q.toLowerCase();
+  const listing =
+    /\b(alle|welche|wie\s*viele|liste|zeige|show|list|how\s*many)\b/.test(s);
+  if (!listing) return { isListing: false, types: [] };
+
+  const types: string[] = [];
+  if (/kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm/.test(s)) types.push("text");
+  if (/gespr(ä|ae)ch|transcript|meeting|call/.test(s)) types.push("transcript");
+  if (/dokument|datei|pdf|doc/.test(s)) types.push("document");
+  // Default: if the user asks "alle/welche" without a type → include short
+  // entity-style sources (text) plus documents.
+  if (types.length === 0) types.push("text", "document");
+  return { isListing: true, types };
+}
+
+function dedupeChunks(chunks: ChunkSearchResult[]): ChunkSearchResult[] {
+  const seen = new Set<string>();
+  const out: ChunkSearchResult[] = [];
+  for (const c of chunks) {
+    const key = `${c.source_id}:${c.chunk_index}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
 
 // ── Conversations ────────────────────────────────────────────────────────
 
@@ -172,14 +209,25 @@ export async function sendMessage(
   const entities = await resolveEntities(searchQuery);
   const boostIds = await getBoostSourceIds(entities);
 
-  const [knowledgeChunks, opEntities] = await Promise.all([
+  const listing = detectListingIntent(trimmed);
+
+  // For listing/counting questions we MUST bypass relevance ranking,
+  // otherwise a long transcript can crowd out short entity sources
+  // (e.g. 1 transcript source produces more chunks than 8 contact sources,
+  //  so hybrid ranking leaves some contacts out of the context window).
+  const [knowledgeChunks, opEntities, exhaustive] = await Promise.all([
     boostIds.length > 0
       ? boostedHybridSearch(searchQuery, boostIds, RETRIEVAL_LIMIT)
       : hybridSearch(searchQuery, RETRIEVAL_LIMIT),
-    searchOperationalEntities(searchQuery, 8),
+    searchOperationalEntities(searchQuery, 20),
+    listing.isListing
+      ? listAllChunksByType(listing.types, LISTING_LIMIT)
+      : Promise.resolve([] as ChunkSearchResult[]),
   ]);
 
-  let chunks = [...knowledgeChunks, ...opEntities];
+  // Order matters: exhaustive first so the LLM sees the complete set,
+  // then semantically relevant extras.
+  let chunks = dedupeChunks([...exhaustive, ...opEntities, ...knowledgeChunks]);
 
   if (chunks.length === 0 && boostIds.length > 0) {
     chunks = await chunksBySourceIds(boostIds, RETRIEVAL_LIMIT);

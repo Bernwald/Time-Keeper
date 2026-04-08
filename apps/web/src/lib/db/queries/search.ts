@@ -194,6 +194,44 @@ export async function searchOperationalEntities(
   return out;
 }
 
+// Exhaustive fetch of all chunks for sources of given types.
+// Used for LISTING questions ("alle Kontakte", "wie viele warme ...") where
+// relevance ranking would otherwise drop short entity-sources behind a single
+// long transcript. Returns up to `limit` chunks, newest source first.
+export async function listAllChunksByType(
+  sourceTypes: string[],
+  limit = 80,
+): Promise<ChunkSearchResult[]> {
+  if (sourceTypes.length === 0) return [];
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+
+  const { data } = await db
+    .from("sources")
+    .select("id, title, source_type, created_at, content_chunks(id, chunk_index, chunk_text)")
+    .eq("organization_id", orgId)
+    .in("source_type", sourceTypes)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  const out: ChunkSearchResult[] = [];
+  for (const s of (data ?? []) as any[]) {
+    for (const c of (s.content_chunks ?? []) as any[]) {
+      out.push({
+        id: c.id,
+        source_id: s.id,
+        chunk_index: c.chunk_index,
+        chunk_text: c.chunk_text,
+        source_title: s.title,
+        source_type: s.source_type,
+        rank: 1,
+      });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
 // Direct chunk retrieval by source IDs (fallback when search finds nothing)
 export async function chunksBySourceIds(
   sourceIds: string[],
