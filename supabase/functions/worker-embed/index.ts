@@ -13,12 +13,15 @@
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
 import { readBatch, ack, deadLetter } from "../_shared/queue.ts";
 import { embedText } from "../_shared/embeddings.ts";
+import { chunkText } from "../_shared/chunking.ts";
 
 const QUEUE                = "embed";
 const VISIBILITY_TIMEOUT   = 120;
 const BATCH_SIZE           = 10;
 const MAX_ATTEMPTS_PER_MSG = 5;
-const MAX_CHARS            = 6000;
+// Hard cap on total characters per source before chunking. Generous, but
+// prevents a runaway 10MB payload from chewing through the OpenAI quota.
+const MAX_SOURCE_CHARS     = 200_000;
 
 interface EmbedMsg {
   organization_id: string;
@@ -43,8 +46,15 @@ Deno.serve(async (req) => {
   for (const m of messages) {
     const msg = m.message;
     try {
-      const text = (msg.text ?? "").slice(0, MAX_CHARS).trim();
+      const text = (msg.text ?? "").slice(0, MAX_SOURCE_CHARS).trim();
       if (!text) {
+        await ack(QUEUE, m.msg_id);
+        continue;
+      }
+
+      // Chunk up front so we know the chunk count before touching the DB.
+      const chunks = chunkText(text, { targetTokens: 400, overlapTokens: 50 });
+      if (chunks.length === 0) {
         await ack(QUEUE, m.msg_id);
         continue;
       }
@@ -105,9 +115,12 @@ Deno.serve(async (req) => {
         sourceId = ins!.id as string;
       }
 
-      // 2. Embed the text. If embedding fails (e.g. no API key), we still
-      //    keep the source row + chunk so FTS search remains usable.
-      const embedding = await embedText(text);
+      // 2. Embed each chunk in parallel. If a single embedding call fails
+      //    (no API key, transient OpenAI error) we still persist the chunk
+      //    with embedding=null so FTS search keeps working.
+      const embeddings = await Promise.all(
+        chunks.map((c) => embedText(c.text).catch(() => null)),
+      );
 
       // 3. Replace existing chunks for this source.
       const { error: delErr } = await supabase
@@ -116,23 +129,25 @@ Deno.serve(async (req) => {
         .eq("source_id", sourceId);
       if (delErr) throw delErr;
 
+      const rows = chunks.map((c, i) => ({
+        organization_id: msg.organization_id,
+        source_id:       sourceId,
+        chunk_index:     c.index,
+        chunk_text:      c.text,
+        token_count:     c.tokenCount,
+        char_start:      c.charStart,
+        char_end:        c.charEnd,
+        embedding:       embeddings[i] ?? null,
+        metadata: {
+          provider_id: msg.provider_id,
+          entity_type: msg.entity_type,
+          external_id: msg.external_id,
+        },
+      }));
+
       const { error: chunkErr } = await supabase
         .from("content_chunks")
-        .insert({
-          organization_id: msg.organization_id,
-          source_id:       sourceId,
-          chunk_index:     0,
-          chunk_text:      text,
-          token_count:     Math.ceil(text.length / 4),
-          char_start:      0,
-          char_end:        text.length,
-          embedding:       embedding ?? null,
-          metadata: {
-            provider_id: msg.provider_id,
-            entity_type: msg.entity_type,
-            external_id: msg.external_id,
-          },
-        });
+        .insert(rows);
       if (chunkErr) throw chunkErr;
 
       await ack(QUEUE, m.msg_id);

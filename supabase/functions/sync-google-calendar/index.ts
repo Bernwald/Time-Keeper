@@ -18,9 +18,17 @@ import { refreshAccessToken } from "../_shared/google-calendar.ts";
 const PROVIDER_ID         = "google_calendar";
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
+// Default sync window. Past defaults to one full year so the chat can answer
+// "wann war Termin X" for anything in the last 12 months. Override per org via
+// organization_integrations.config: { window_days_back, window_days_forward }.
+const DEFAULT_WINDOW_DAYS_BACK    = 365;
+const DEFAULT_WINDOW_DAYS_FORWARD = 180;
+
 interface SyncRequest {
-  organization_id: string;
-  trigger?:        "manual" | "cron";
+  organization_id:      string;
+  trigger?:             "manual" | "cron";
+  window_days_back?:    number;
+  window_days_forward?: number;
 }
 
 interface CalendarRow {
@@ -60,11 +68,11 @@ async function getValidAccessToken(row: CalendarRow): Promise<string> {
 async function fetchEvents(
   accessToken: string,
   calendarId:  string,
+  daysBack:    number,
+  daysForward: number,
 ): Promise<SyncRecord[]> {
-  // Pull a 90-day window: 30 days back, 60 days forward. Adjustable per tenant
-  // later via organization_integrations.config.
-  const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const timeMax = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+  const timeMin = new Date(Date.now() - daysBack    * 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(Date.now() + daysForward * 24 * 60 * 60 * 1000).toISOString();
 
   const records: SyncRecord[] = [];
   let pageToken: string | undefined;
@@ -119,6 +127,23 @@ Deno.serve(async (req) => {
   if (rowErr)  return errorResponse(rowErr.message, 500);
   if (!row)    return errorResponse("No active calendar_integrations row", 404);
 
+  // Resolve sync window: explicit body params win, then per-org integration
+  // config, then sensible defaults. Manual backfills can pass huge windows.
+  const { data: integ } = await supabase
+    .from("organization_integrations")
+    .select("config")
+    .eq("organization_id", body.organization_id)
+    .eq("provider_id",     PROVIDER_ID)
+    .maybeSingle<{ config: Record<string, unknown> | null }>();
+
+  const cfg         = integ?.config ?? {};
+  const daysBack    = body.window_days_back
+                    ?? (cfg.window_days_back as number | undefined)
+                    ?? DEFAULT_WINDOW_DAYS_BACK;
+  const daysForward = body.window_days_forward
+                    ?? (cfg.window_days_forward as number | undefined)
+                    ?? DEFAULT_WINDOW_DAYS_FORWARD;
+
   try {
     const result = await runSync({
       organizationId: body.organization_id,
@@ -129,7 +154,7 @@ Deno.serve(async (req) => {
       retry:     { maxAttempts: 4, baseDelayMs: 750 },
       syncFn: async () => {
         const accessToken = await getValidAccessToken(row);
-        return fetchEvents(accessToken, row.calendar_id);
+        return fetchEvents(accessToken, row.calendar_id, daysBack, daysForward);
       },
     });
 

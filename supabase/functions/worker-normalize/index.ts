@@ -10,6 +10,7 @@
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
 import { readBatch, ack, deadLetter, enqueue } from "../_shared/queue.ts";
+import { flattenPayloadToText } from "../_shared/normalize.ts";
 
 const QUEUE                 = "normalize";
 const VISIBILITY_TIMEOUT    = 60;   // seconds
@@ -121,15 +122,28 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      const payload    = rawRows[0].payload as Record<string, unknown>;
       const key        = `${msg.provider_id}:${msg.entity_type}`;
       const normalizer = NORMALIZERS[key];
-      if (!normalizer) {
-        // Unknown type — ack so it doesn't loop. Raw row is preserved.
-        await ack(QUEUE, m.msg_id);
-        continue;
+      if (normalizer) {
+        await normalizer(msg, payload);
+      } else {
+        // Unknown type — fall back to a generic flatten so the data still
+        // reaches the RAG layer instead of being silently dropped.
+        const fallbackTitle = `${msg.entity_type} ${msg.external_id}`;
+        const { title, text } = flattenPayloadToText(payload, fallbackTitle);
+        if (text) {
+          await enqueue("embed", {
+            organization_id: msg.organization_id,
+            provider_id:     msg.provider_id,
+            entity_type:     msg.entity_type,
+            external_id:     msg.external_id,
+            run_id:          msg.run_id,
+            title,
+            text,
+          });
+        }
       }
-
-      await normalizer(msg, rawRows[0].payload as Record<string, unknown>);
       await ack(QUEUE, m.msg_id);
       processed++;
     } catch (err) {
