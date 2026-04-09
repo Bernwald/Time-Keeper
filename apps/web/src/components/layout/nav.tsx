@@ -138,8 +138,8 @@ const groups: NavGroup[] = [
   {
     label: "Wissen",
     items: [
-      { href: "/sources", label: "Quellen", icon: IconSources },
-      { href: "/sources/import", label: "Import", icon: IconImport },
+      { href: "/quellen", label: "Quellen", icon: IconSources },
+      { href: "/sources", label: "Dateien (alt)", icon: IconImport },
       { href: "/search", label: "Suche", icon: IconSearch },
       { href: "/chat", label: "Chat", icon: IconChat },
     ],
@@ -159,7 +159,7 @@ const groups: NavGroup[] = [
 // All items flat for mobile
 const mobileItems: NavItem[] = [
   { href: "/", label: "Start", icon: IconHome },
-  { href: "/sources", label: "Quellen", icon: IconSources },
+  { href: "/quellen", label: "Quellen", icon: IconSources },
   { href: "/search", label: "Suche", icon: IconSearch },
   { href: "/chat", label: "Chat", icon: IconChat },
   { href: "/companies", label: "Mehr", icon: IconCompany },
