@@ -189,13 +189,86 @@ export async function listAllDriveFileIds(
   return files.map((f) => f.id);
 }
 
+// Uploaded Office files (docx/xlsx/pptx) are OOXML — zip archives with
+// XML parts inside. We pull the archive via alt=media, unzip in-memory,
+// then strip XML tags from the parts that carry user-visible text.
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+function stripXml(xml: string): string {
+  return xml
+    .replace(/<\/w:p>|<\/w:tr>|<\/a:p>|<\/text:p>|<\/row>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function extractOoxmlText(
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<string | null> {
+  // Lazy-load jszip only when we actually hit an OOXML file so the cold
+  // start for text/html + Google-native files stays fast.
+  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+  let zip: InstanceType<typeof JSZip>;
+  try {
+    zip = await JSZip.loadAsync(bytes);
+  } catch (err) {
+    console.warn("[gdrive] ooxml unzip failed:", err);
+    return null;
+  }
+
+  const textParts: string[] = [];
+
+  if (mimeType === DOCX_MIME) {
+    const doc = zip.file("word/document.xml");
+    if (doc) textParts.push(stripXml(await doc.async("string")));
+  } else if (mimeType === XLSX_MIME) {
+    // sharedStrings.xml holds every unique string in the workbook and
+    // contains the bulk of user-visible content. sheetN.xml has cell
+    // references + inline numbers.
+    const shared = zip.file("xl/sharedStrings.xml");
+    if (shared) textParts.push(stripXml(await shared.async("string")));
+    const sheetFiles = zip.file(/^xl\/worksheets\/sheet\d+\.xml$/);
+    for (const sheet of sheetFiles) {
+      textParts.push(stripXml(await sheet.async("string")));
+    }
+  } else if (mimeType === PPTX_MIME) {
+    const slideFiles = zip.file(/^ppt\/slides\/slide\d+\.xml$/);
+    for (const slide of slideFiles) {
+      textParts.push(stripXml(await slide.async("string")));
+    }
+  }
+
+  const joined = textParts.join("\n\n").trim();
+  return joined.length > 0 ? joined : null;
+}
+
+async function downloadDriveBytes(
+  accessToken: string,
+  fileId: string,
+): Promise<Uint8Array | null> {
+  const res = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 export async function downloadDriveFileText(
   accessToken: string,
   fileId: string,
   mimeType?: string,
 ): Promise<string | null> {
-  // Google-native docs need export, plain files use alt=media. Limit to
-  // text-extractable types in v1.
+  // Google-native docs need export, plain files use alt=media.
   if (mimeType === "application/vnd.google-apps.document") {
     const res = await fetch(
       `${DRIVE_API}/files/${fileId}/export?mimeType=text/plain`,
@@ -212,6 +285,27 @@ export async function downloadDriveFileText(
     if (!res.ok) return null;
     return await res.text();
   }
+  if (mimeType === "application/vnd.google-apps.presentation") {
+    const res = await fetch(
+      `${DRIVE_API}/files/${fileId}/export?mimeType=text/plain`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) return null;
+    return await res.text();
+  }
+
+  // Uploaded Office docs: download bytes, unzip, strip XML.
+  if (mimeType === DOCX_MIME || mimeType === XLSX_MIME || mimeType === PPTX_MIME) {
+    const bytes = await downloadDriveBytes(accessToken, fileId);
+    if (!bytes) return null;
+    try {
+      return await extractOoxmlText(bytes, mimeType);
+    } catch (err) {
+      console.warn("[gdrive] ooxml extract failed:", fileId, err);
+      return null;
+    }
+  }
+
   const isText =
     !mimeType ||
     mimeType.startsWith("text/") ||
