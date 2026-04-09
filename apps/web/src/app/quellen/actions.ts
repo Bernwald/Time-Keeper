@@ -59,6 +59,7 @@ export async function triggerInitialSync(
   });
 
   revalidatePath("/quellen");
+  revalidatePath("/papierkorb");
 }
 
 // Re-enqueue the latest raw_events row for a single connector source so the
@@ -125,6 +126,18 @@ export async function reconcileConnector(
     providerId === "sharepoint"
       ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-sharepoint`
       : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-gdrive`;
+
+  // First do a full re-listing so newly added or restored Drive files land
+  // as raw_events, then reconcile away anything that's gone. Sequential — the
+  // reconcile pass should see the freshly upserted sources.
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ action: "initial-sync", organization_id: orgId }),
+  });
 
   await fetch(url, {
     method: "POST",

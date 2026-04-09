@@ -125,6 +125,7 @@ export default async function QuellenPage({
     .select("id, title, connector_type, sync_status, last_synced_at, source_url")
     .eq("organization_id", orgId)
     .in("connector_type", ["sharepoint", "gdrive"])
+    .is("deleted_at", null)
     .order("last_synced_at", { ascending: false })
     .limit(500);
   const sources = (sourcesRaw ?? []) as SourceRow[];
