@@ -3,6 +3,7 @@ import { createUserClient, getUser } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
 import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
+import { AutoRefreshWhileSyncing } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +23,82 @@ type SourceRow = {
   source_url: string | null;
 };
 
+type Stats = {
+  total: number;
+  indexed: number;
+  processing: number;
+  pending: number;
+  failed: number;
+};
+
+type FileState = "indexed" | "processing" | "pending" | "failed";
+
 const PROVIDER_LABEL: Record<string, string> = {
   sharepoint: "Microsoft SharePoint",
   google_drive: "Google Drive",
 };
+
+const INDEXED = new Set(["ready", "indexed", "done", "completed", "synced"]);
+const PROCESSING = new Set(["processing", "embedding", "running", "syncing"]);
+const PENDING = new Set(["pending", "queued", "new", "waiting"]);
+const FAILED = new Set(["error", "failed"]);
+
+function classify(status: string): FileState {
+  const s = (status || "").toLowerCase();
+  if (INDEXED.has(s)) return "indexed";
+  if (PROCESSING.has(s)) return "processing";
+  if (FAILED.has(s)) return "failed";
+  if (PENDING.has(s)) return "pending";
+  return "pending";
+}
+
+function aggregate(rows: SourceRow[]): Stats {
+  const stats: Stats = { total: 0, indexed: 0, processing: 0, pending: 0, failed: 0 };
+  for (const r of rows) {
+    stats.total++;
+    stats[classify(r.sync_status)]++;
+  }
+  return stats;
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "noch nie synchronisiert";
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  const min = Math.round(diff / 60000);
+  if (min < 1) return "Sync gerade eben";
+  if (min < 60) return `Sync vor ${min} Min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `Sync vor ${h} Std`;
+  const d = Math.round(h / 24);
+  return `Sync vor ${d} Tagen`;
+}
+
+function fileStateLabel(state: FileState): string {
+  switch (state) {
+    case "indexed":
+      return "indexiert";
+    case "processing":
+      return "verarbeitet…";
+    case "pending":
+      return "wartet";
+    case "failed":
+      return "Fehler";
+  }
+}
+
+function fileStateColor(state: FileState): string {
+  switch (state) {
+    case "indexed":
+      return "var(--color-success)";
+    case "processing":
+      return "var(--color-accent)";
+    case "pending":
+      return "var(--color-muted)";
+    case "failed":
+      return "var(--color-danger)";
+  }
+}
 
 export default async function QuellenPage({
   searchParams,
@@ -52,7 +125,7 @@ export default async function QuellenPage({
     .eq("organization_id", orgId)
     .in("connector_type", ["sharepoint", "gdrive"])
     .order("last_synced_at", { ascending: false })
-    .limit(100);
+    .limit(500);
   const sources = (sourcesRaw ?? []) as SourceRow[];
 
   const byProvider: Record<string, SourceRow[]> = { sharepoint: [], gdrive: [] };
@@ -64,8 +137,16 @@ export default async function QuellenPage({
   const sharepointInteg = integrations.find((i) => i.provider_id === "sharepoint");
   const gdriveInteg = integrations.find((i) => i.provider_id === "google_drive");
 
+  const sharepointStats = aggregate(byProvider.sharepoint);
+  const gdriveStats = aggregate(byProvider.gdrive);
+
+  const anySyncing =
+    sharepointStats.processing + sharepointStats.pending > 0 ||
+    gdriveStats.processing + gdriveStats.pending > 0;
+
   return (
     <div className={page.wrapper}>
+      <AutoRefreshWhileSyncing active={anySyncing} />
       <div className={page.header}>
         <h1
           className="text-xl md:text-2xl font-semibold"
@@ -100,12 +181,14 @@ export default async function QuellenPage({
         providerId="sharepoint"
         integration={sharepointInteg}
         files={byProvider.sharepoint}
+        stats={sharepointStats}
         connectAction={connectSharepoint}
       />
       <ConnectorCard
         providerId="google_drive"
         integration={gdriveInteg}
         files={byProvider.gdrive}
+        stats={gdriveStats}
         connectAction={connectGdrive}
       />
     </div>
@@ -116,15 +199,47 @@ function ConnectorCard(props: {
   providerId: "sharepoint" | "google_drive";
   integration?: Integration;
   files: SourceRow[];
+  stats: Stats;
   connectAction: () => Promise<void>;
 }) {
-  const { providerId, integration, files } = props;
+  const { providerId, integration, files, stats } = props;
   const isActive = integration?.status === "active";
+  const inFlight = stats.processing + stats.pending;
+  const isSyncing = isActive && inFlight > 0;
+
+  type Health = { kind: "ok" | "sync" | "warn" | "idle"; label: string };
+  let health: Health;
+  if (!isActive) {
+    health = { kind: "warn", label: integration ? "Token abgelaufen" : "nicht verbunden" };
+  } else if (isSyncing) {
+    health = { kind: "sync", label: `Sync läuft… ${stats.indexed} / ${stats.total}` };
+  } else if (stats.failed > 0) {
+    health = { kind: "warn", label: `${stats.failed} Fehler` };
+  } else {
+    health = { kind: "ok", label: relativeTime(integration?.last_synced_at ?? null) };
+  }
+
+  const healthDotColor =
+    health.kind === "ok"
+      ? "var(--color-success)"
+      : health.kind === "sync"
+        ? "var(--color-accent)"
+        : health.kind === "warn"
+          ? "var(--color-warning)"
+          : "var(--color-muted)";
+
+  const subtitle = isSyncing
+    ? `${stats.indexed} / ${stats.total} verarbeitet`
+    : stats.total > 0
+      ? `${stats.indexed} Dateien indexiert${stats.failed > 0 ? ` · ${stats.failed} Fehler` : ""}`
+      : "Noch keine Dateien indexiert";
+
+  const progressPct = stats.total > 0 ? Math.round((stats.indexed / stats.total) * 100) : 0;
 
   return (
     <div className={card.flat} style={styles.panel}>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
+        <div className="min-w-0">
           <h2
             className="text-base font-semibold"
             style={{ color: "var(--color-text)", fontFamily: "var(--font-display)" }}
@@ -132,66 +247,106 @@ function ConnectorCard(props: {
             {PROVIDER_LABEL[providerId]}
           </h2>
           <p className="text-xs mt-1" style={{ color: "var(--color-muted)" }}>
-            Status: {integration?.status ?? "nicht verbunden"} ·{" "}
-            {integration?.last_synced_at
-              ? `zuletzt ${new Date(integration.last_synced_at).toLocaleString("de-DE")}`
-              : "noch nie synchronisiert"}
+            {subtitle}
           </p>
         </div>
-        {!isActive ? (
-          <form action={props.connectAction}>
-            <button type="submit" className={btn.primary} style={styles.accent}>
-              Verbinden
-            </button>
-          </form>
-        ) : (
-          <form action={triggerInitialSync.bind(null, providerId)}>
-            <button type="submit" className={btn.secondary} style={styles.panel}>
-              Jetzt synchronisieren
-            </button>
-          </form>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="inline-flex items-center gap-2 text-xs px-3 min-h-[32px] rounded-[var(--radius-full)]"
+            style={{ background: "var(--color-bg-elevated)", color: "var(--color-muted)" }}
+          >
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${health.kind === "sync" ? "animate-pulse" : ""}`}
+              style={{ background: healthDotColor }}
+            />
+            {health.label}
+          </span>
+          {!isActive ? (
+            <form action={props.connectAction}>
+              <button type="submit" className={btn.primary} style={styles.accent}>
+                Verbinden
+              </button>
+            </form>
+          ) : (
+            <form action={triggerInitialSync.bind(null, providerId)}>
+              <button type="submit" className={btn.secondary} style={styles.panel}>
+                Jetzt synchronisieren
+              </button>
+            </form>
+          )}
+        </div>
       </div>
+
+      {isSyncing && (
+        <div className="mb-4 flex items-center gap-3">
+          <div
+            className="flex-1 h-2 rounded-[var(--radius-full)] overflow-hidden"
+            style={{ background: "var(--color-bg-elevated)" }}
+          >
+            <div
+              className="h-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, background: "var(--color-accent)" }}
+            />
+          </div>
+          <span
+            className="text-xs tabular-nums"
+            style={{ color: "var(--color-muted)", fontFamily: "var(--font-mono)" }}
+          >
+            {stats.indexed} / {stats.total}
+          </span>
+        </div>
+      )}
 
       {files.length === 0 ? (
         <p className="text-sm" style={{ color: "var(--color-muted)" }}>
           Noch keine Dateien indexiert.
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {files.map((f) => (
-            <li
-              key={f.id}
-              className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2"
-              style={{ background: "var(--color-bg-elevated)" }}
-            >
-              <div className="min-w-0">
-                <p
-                  className="text-sm font-medium truncate"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {f.title}
-                </p>
-                <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                  {f.sync_status}
-                  {f.last_synced_at
-                    ? ` · ${new Date(f.last_synced_at).toLocaleString("de-DE")}`
-                    : ""}
-                </p>
-              </div>
-              {f.source_url && (
-                <a
-                  href={f.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs underline"
-                  style={{ color: "var(--color-accent)" }}
-                >
-                  oeffnen
-                </a>
-              )}
-            </li>
-          ))}
+        <ul
+          className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1"
+        >
+          {files.map((f) => {
+            const state = classify(f.sync_status);
+            return (
+              <li
+                key={f.id}
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 min-h-[44px]"
+                style={{ background: "var(--color-bg-elevated)" }}
+              >
+                <div className="min-w-0 flex items-center gap-3">
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${state === "processing" ? "animate-pulse" : ""}`}
+                    style={{ background: fileStateColor(state) }}
+                  />
+                  <div className="min-w-0">
+                    <p
+                      className="text-sm font-medium truncate"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      {f.title}
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                      {fileStateLabel(state)}
+                      {f.last_synced_at
+                        ? ` · ${new Date(f.last_synced_at).toLocaleString("de-DE")}`
+                        : ""}
+                    </p>
+                  </div>
+                </div>
+                {f.source_url && (
+                  <a
+                    href={f.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs underline flex-shrink-0"
+                    style={{ color: "var(--color-accent)" }}
+                  >
+                    oeffnen
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
