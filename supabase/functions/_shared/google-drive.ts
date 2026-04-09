@@ -58,6 +58,9 @@ export async function listDriveChanges(
       url.searchParams.set("pageSize", "200");
       url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,md5Checksum,size,trashed)");
       url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
+      url.searchParams.set("supportsAllDrives", "true");
+      url.searchParams.set("includeItemsFromAllDrives", "true");
+      url.searchParams.set("corpora", "allDrives");
       if (nextFileToken) url.searchParams.set("pageToken", nextFileToken);
       const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -77,6 +80,8 @@ export async function listDriveChanges(
     url.searchParams.set("pageToken", token);
     url.searchParams.set("pageSize", "200");
     url.searchParams.set("fields", "nextPageToken,newStartPageToken,changes(fileId,removed,time,file(id,name,mimeType,webViewLink,modifiedTime,md5Checksum,size,trashed))");
+    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set("includeItemsFromAllDrives", "true");
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`drive changes ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = await res.json();
@@ -112,6 +117,9 @@ export async function listAllDriveFileIds(
     url.searchParams.set("pageSize", "1000");
     url.searchParams.set("fields", "nextPageToken,files(id)");
     url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
+    url.searchParams.set("supportsAllDrives", "true");
+    url.searchParams.set("includeItemsFromAllDrives", "true");
+    url.searchParams.set("corpora", "allDrives");
     if (nextPageToken) url.searchParams.set("pageToken", nextPageToken);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
