@@ -61,6 +61,20 @@ async function hashPayload(payload: unknown): Promise<string> {
     .join("");
 }
 
+// Best-effort human-readable error message. Supabase PostgrestError is a
+// plain object, so `String(err)` collapses to "[object Object]" which is
+// useless in job_failures. Pull out message/code/details/hint when present.
+function formatError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object") {
+    const o = err as Record<string, unknown>;
+    const parts = [o.message, o.code, o.details, o.hint].filter(Boolean);
+    if (parts.length > 0) return parts.join(" | ");
+    try { return JSON.stringify(err); } catch { return String(err); }
+  }
+  return String(err);
+}
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
@@ -139,7 +153,7 @@ export async function runSync(opts: RunSyncOptions): Promise<RunSyncResult> {
           run_id:          runId,
           queue_name:      queue,
           message:         { external_id: rec.external_id, entity_type: rec.entity_type },
-          error_message:   recErr instanceof Error ? recErr.message : String(recErr),
+          error_message:   formatError(recErr),
           error_stack:     recErr instanceof Error ? recErr.stack ?? null : null,
           attempt_count:   1,
         });

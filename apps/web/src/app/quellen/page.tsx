@@ -4,6 +4,7 @@ import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
 import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
 import { AutoRefreshWhileSyncing } from "./auto-refresh";
+import { RetryButton } from "./retry-button";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   google_drive: "Google Drive",
 };
 
-const INDEXED = new Set(["ready", "indexed", "done", "completed", "synced"]);
+const INDEXED = new Set(["ready", "indexed", "done", "completed", "synced", "success"]);
 const PROCESSING = new Set(["processing", "embedding", "running", "syncing"]);
 const PENDING = new Set(["pending", "queued", "new", "waiting"]);
 const FAILED = new Set(["error", "failed"]);
@@ -302,52 +303,71 @@ function ConnectorCard(props: {
           Noch keine Dateien indexiert.
         </p>
       ) : (
-        <ul
-          className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1"
-        >
-          {files.map((f) => {
-            const state = classify(f.sync_status);
-            return (
-              <li
-                key={f.id}
-                className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 min-h-[44px]"
-                style={{ background: "var(--color-bg-elevated)" }}
-              >
-                <div className="min-w-0 flex items-center gap-3">
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${state === "processing" ? "animate-pulse" : ""}`}
-                    style={{ background: fileStateColor(state) }}
-                  />
-                  <div className="min-w-0">
-                    <p
-                      className="text-sm font-medium truncate"
-                      style={{ color: "var(--color-text)" }}
-                    >
-                      {f.title}
-                    </p>
-                    <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                      {fileStateLabel(state)}
-                      {f.last_synced_at
-                        ? ` · ${new Date(f.last_synced_at).toLocaleString("de-DE")}`
-                        : ""}
-                    </p>
+        <details open={files.length <= 8} className="group">
+          <summary
+            className="cursor-pointer list-none flex items-center justify-between gap-2 text-xs min-h-[44px] px-1 select-none"
+            style={{ color: "var(--color-muted)" }}
+          >
+            <span>
+              {files.length} {files.length === 1 ? "Datei" : "Dateien"} ·{" "}
+              {stats.indexed} indexiert
+              {stats.failed > 0 ? ` · ${stats.failed} Fehler` : ""}
+            </span>
+            <span
+              className="text-[10px] transition-transform group-open:rotate-180"
+              aria-hidden
+            >
+              ▾
+            </span>
+          </summary>
+          <ul className="flex flex-col gap-2 max-h-[360px] overflow-y-auto pr-1 mt-2">
+            {files.map((f) => {
+              const state = classify(f.sync_status);
+              return (
+                <li
+                  key={f.id}
+                  className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 min-h-[44px]"
+                  style={{ background: "var(--color-bg-elevated)" }}
+                >
+                  <div className="min-w-0 flex items-center gap-3 flex-1">
+                    <span
+                      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${state === "processing" ? "animate-pulse" : ""}`}
+                      style={{ background: fileStateColor(state) }}
+                    />
+                    <div className="min-w-0">
+                      <p
+                        className="text-sm font-medium truncate"
+                        style={{ color: "var(--color-text)" }}
+                      >
+                        {f.title}
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                        {fileStateLabel(state)}
+                        {f.last_synced_at
+                          ? ` · ${new Date(f.last_synced_at).toLocaleString("de-DE")}`
+                          : ""}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                {f.source_url && (
-                  <a
-                    href={f.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs underline flex-shrink-0"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    oeffnen
-                  </a>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {f.source_url && (
+                      <a
+                        href={f.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs underline"
+                        style={{ color: "var(--color-accent)" }}
+                      >
+                        öffnen
+                      </a>
+                    )}
+                    <RetryButton sourceId={f.id} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
       )}
     </div>
   );

@@ -32,6 +32,11 @@ interface EmbedMsg {
   title:           string;
   text:            string;
   metadata?:       Record<string, unknown>;
+  // Connector workers (gdrive/sharepoint) pass the existing connector source
+  // id so we update that row in place instead of creating a parallel
+  // source_type='entity' row. Without this the connector rows stay forever
+  // on sync_status='queued' and the /quellen progress bar never advances.
+  source_id?:      string;
 }
 
 Deno.serve(async (req) => {
@@ -59,60 +64,84 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 1. Upsert source row keyed on (org, provider, external_id) via metadata.
-      //    We use a deterministic title + metadata so re-runs are idempotent.
+      // 1. Resolve the target sources row.
+      //    a) Connector path: msg.source_id is set by worker-normalize for
+      //       gdrive/sharepoint. Update that connector row in place and flip
+      //       both `status` (used by /sources) and `sync_status` (used by
+      //       /quellen) to `ready`.
+      //    b) Entity path: legacy callers (calendar etc.) carry no source_id;
+      //       we keep the metadata.source_key lookup and create a parallel
+      //       source_type='entity' row.
       const sourceKey = `${msg.provider_id}:${msg.entity_type}:${msg.external_id}`;
-      const { data: existing, error: selErr } = await supabase
-        .from("sources")
-        .select("id")
-        .eq("organization_id", msg.organization_id)
-        .eq("source_type",     "entity")
-        .contains("metadata",  { source_key: sourceKey })
-        .limit(1);
-      if (selErr) throw selErr;
-
+      const wordCount = text.split(/\s+/).length;
       let sourceId: string;
-      if (existing && existing.length > 0) {
-        sourceId = existing[0].id as string;
+
+      if (msg.source_id) {
+        sourceId = msg.source_id;
         const { error: updErr } = await supabase
           .from("sources")
           .update({
-            title:      msg.title,
-            raw_text:   text,
-            status:     "ready",
-            word_count: text.split(/\s+/).length,
-            metadata:   {
-              source_key:  sourceKey,
-              provider_id: msg.provider_id,
-              entity_type: msg.entity_type,
-              external_id: msg.external_id,
-              ...(msg.metadata ?? {}),
-            },
+            title:       msg.title,
+            raw_text:    text,
+            status:      "ready",
+            sync_status: "success",
+            word_count:  wordCount,
           })
-          .eq("id", sourceId);
+          .eq("id", sourceId)
+          .eq("organization_id", msg.organization_id);
         if (updErr) throw updErr;
       } else {
-        const { data: ins, error: insErr } = await supabase
+        const { data: existing, error: selErr } = await supabase
           .from("sources")
-          .insert({
-            organization_id: msg.organization_id,
-            title:           msg.title,
-            source_type:     "entity",
-            raw_text:        text,
-            status:          "ready",
-            word_count:      text.split(/\s+/).length,
-            metadata: {
-              source_key:  sourceKey,
-              provider_id: msg.provider_id,
-              entity_type: msg.entity_type,
-              external_id: msg.external_id,
-              ...(msg.metadata ?? {}),
-            },
-          })
           .select("id")
-          .single();
-        if (insErr) throw insErr;
-        sourceId = ins!.id as string;
+          .eq("organization_id", msg.organization_id)
+          .eq("source_type",     "entity")
+          .contains("metadata",  { source_key: sourceKey })
+          .limit(1);
+        if (selErr) throw selErr;
+
+        if (existing && existing.length > 0) {
+          sourceId = existing[0].id as string;
+          const { error: updErr } = await supabase
+            .from("sources")
+            .update({
+              title:      msg.title,
+              raw_text:   text,
+              status:     "ready",
+              word_count: wordCount,
+              metadata:   {
+                source_key:  sourceKey,
+                provider_id: msg.provider_id,
+                entity_type: msg.entity_type,
+                external_id: msg.external_id,
+                ...(msg.metadata ?? {}),
+              },
+            })
+            .eq("id", sourceId);
+          if (updErr) throw updErr;
+        } else {
+          const { data: ins, error: insErr } = await supabase
+            .from("sources")
+            .insert({
+              organization_id: msg.organization_id,
+              title:           msg.title,
+              source_type:     "entity",
+              raw_text:        text,
+              status:          "ready",
+              word_count:      wordCount,
+              metadata: {
+                source_key:  sourceKey,
+                provider_id: msg.provider_id,
+                entity_type: msg.entity_type,
+                external_id: msg.external_id,
+                ...(msg.metadata ?? {}),
+              },
+            })
+            .select("id")
+            .single();
+          if (insErr) throw insErr;
+          sourceId = ins!.id as string;
+        }
       }
 
       // 2. Embed each chunk in parallel. If a single embedding call fails

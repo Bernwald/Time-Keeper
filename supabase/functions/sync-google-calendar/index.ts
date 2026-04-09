@@ -81,7 +81,10 @@ async function fetchEvents(
     const url = new URL(`${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`);
     url.searchParams.set("timeMin",      timeMin);
     url.searchParams.set("timeMax",      timeMax);
-    url.searchParams.set("singleEvents", "true");
+    // singleEvents=false → recurring series come back as ONE master event
+    // with a `recurrence` rule, instead of being expanded into one row per
+    // occurrence. Avoids polluting sources/raw_events with duplicates.
+    url.searchParams.set("singleEvents", "false");
     url.searchParams.set("maxResults",   "250");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 

@@ -182,6 +182,7 @@ async function normalizeGoogleCalendarEvent(
 }
 
 Deno.serve(async (req) => {
+  try {
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 
   const supabase = getServiceClient();
@@ -257,4 +258,9 @@ Deno.serve(async (req) => {
   }
 
   return jsonResponse({ processed, failed, batch: messages.length });
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error("[worker-normalize] FATAL", err.message, err.stack);
+    return jsonResponse({ error: err.message, stack: err.stack }, 500);
+  }
 });

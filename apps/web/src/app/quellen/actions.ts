@@ -61,6 +61,60 @@ export async function triggerInitialSync(
   revalidatePath("/quellen");
 }
 
+// Re-enqueue the latest raw_events row for a single connector source so the
+// normalize → embed pipeline runs again. Use this when a file is stuck (e.g.
+// failed embed) and the user wants to retry without triggering a full sync.
+export async function retrySource(sourceId: string): Promise<void> {
+  const orgId = await requireOrgId();
+  const db = createServiceClient();
+
+  const { data: source, error: srcErr } = await db
+    .from("sources")
+    .select("id, organization_id, connector_type, external_id")
+    .eq("id", sourceId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (srcErr) throw srcErr;
+  if (!source || !source.external_id) throw new Error("source not found");
+
+  const providerId =
+    source.connector_type === "sharepoint" ? "sharepoint" : "google_drive";
+
+  const { data: raw, error: rawErr } = await db
+    .from("raw_events")
+    .select("run_id, entity_type, payload_hash")
+    .eq("organization_id", orgId)
+    .eq("provider_id", providerId)
+    .eq("external_id", source.external_id)
+    .order("fetched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (rawErr) throw rawErr;
+  if (!raw) throw new Error("no raw_events row found for this source");
+
+  // Mark as queued so the UI shows progress immediately.
+  await db
+    .from("sources")
+    .update({ sync_status: "queued" })
+    .eq("id", sourceId);
+
+  const { error: enqErr } = await db.rpc("pgmq_send", {
+    p_queue: "normalize",
+    p_msg: {
+      organization_id: orgId,
+      provider_id: providerId,
+      run_id: raw.run_id,
+      external_id: source.external_id,
+      entity_type: raw.entity_type,
+      payload_hash: raw.payload_hash,
+    },
+  });
+  if (enqErr) throw enqErr;
+
+  revalidatePath("/quellen");
+  revalidatePath("/sources");
+}
+
 // Persist OAuth tokens after successful callback.
 export async function saveSharepointTokens(tokens: {
   refresh_token: string;

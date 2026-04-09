@@ -13,6 +13,9 @@ export type Source = {
   original_filename: string | null;
   created_at: string;
   updated_at: string;
+  connector_type: string | null;
+  sync_status: string | null;
+  source_url: string | null;
 };
 
 const DEFAULT_LIMIT = 200;
@@ -22,7 +25,7 @@ export async function listSources(options?: { limit?: number }): Promise<Source[
   const db = await createUserClient();
   const { data, error } = await db
     .from("sources")
-    .select("id, title, description, source_type, status, word_count, raw_text, storage_path, original_filename, created_at, updated_at")
+    .select("id, title, description, source_type, status, word_count, raw_text, storage_path, original_filename, created_at, updated_at, connector_type, sync_status, source_url")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false })
     .limit(options?.limit ?? DEFAULT_LIMIT);
