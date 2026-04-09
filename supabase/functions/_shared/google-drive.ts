@@ -143,26 +143,37 @@ async function listAllFilesRecursive(accessToken: string): Promise<DriveFile[]> 
     return out;
   }
 
-  // Seed: every top-level item the user can see (owned + shared with me +
-  // root folder contents). This grabs folders we'll descend into as well as
-  // loose files sitting at the roots.
-  const seeds = await listChildren(
-    "trashed = false and ('me' in owners or sharedWithMe = true or 'root' in parents)",
-  );
-
   const queue: string[] = [];
-  for (const f of seeds) {
-    if (f.mimeType === "application/vnd.google-apps.folder") {
-      if (!visitedFolders.has(f.id)) {
-        visitedFolders.add(f.id);
-        queue.push(f.id);
-      }
-    } else {
-      files.set(f.id, f);
+
+  // Seed 1: all folders the user owns or that are shared with them. We
+  // query folders and non-folders separately because combining them with
+  // OR can produce an empty result in Drive's query parser.
+  const ownedFolders = await listChildren(
+    "trashed = false and mimeType = 'application/vnd.google-apps.folder' and 'me' in owners",
+  );
+  const sharedFolders = await listChildren(
+    "trashed = false and mimeType = 'application/vnd.google-apps.folder' and sharedWithMe = true",
+  );
+  for (const f of [...ownedFolders, ...sharedFolders]) {
+    if (!visitedFolders.has(f.id)) {
+      visitedFolders.add(f.id);
+      queue.push(f.id);
     }
   }
 
-  // BFS through folders, listing children of each. New subfolders are queued.
+  // Seed 2: loose files at the roots (owned + shared-with-me files that
+  // aren't inside a folder we'll descend into anyway — collected eagerly,
+  // the Map dedupes by id against what the BFS finds).
+  const ownedFiles = await listChildren(
+    "trashed = false and mimeType != 'application/vnd.google-apps.folder' and 'me' in owners",
+  );
+  const sharedFiles = await listChildren(
+    "trashed = false and mimeType != 'application/vnd.google-apps.folder' and sharedWithMe = true",
+  );
+  for (const f of [...ownedFiles, ...sharedFiles]) files.set(f.id, f);
+
+  // BFS through folders, listing children of each. Picks up inherited-
+  // access files (e.g. a collaborator's file in a folder we own).
   while (queue.length > 0) {
     const folderId = queue.shift()!;
     const children = await listChildren(
