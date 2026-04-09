@@ -27,7 +27,12 @@ const PROVIDER_LABEL: Record<string, string> = {
   google_drive: "Google Drive",
 };
 
-export default async function QuellenPage() {
+export default async function QuellenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; connected?: string }>;
+}) {
+  const sp = await searchParams;
   const user = await getUser();
   if (!user) redirect("/login");
 
@@ -73,6 +78,23 @@ export default async function QuellenPage() {
           automatisch. Aenderungen in der Quelle landen ohne Re-Upload im Chat.
         </p>
       </div>
+
+      {sp?.error && (
+        <div
+          className="rounded-[var(--radius-card)] p-3 text-sm"
+          style={{ background: "var(--color-danger-soft, #fee)", color: "var(--color-danger, #c00)" }}
+        >
+          Fehler: {sp.error}
+        </div>
+      )}
+      {sp?.connected && (
+        <div
+          className="rounded-[var(--radius-card)] p-3 text-sm"
+          style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+        >
+          Verbunden: {sp.connected}
+        </div>
+      )}
 
       <ConnectorCard
         providerId="sharepoint"

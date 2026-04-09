@@ -1,0 +1,387 @@
+<!doctype html>
+<!--
+  Präsentationsversion des Strategie-Papers.
+  Inhaltlich identisch mit docs/strategie.md (Single Source of Truth).
+  Beide Dateien synchron halten. Letzte Aktualisierung: 2026-04-09
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeKeeper — Strategie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Tokens — gespiegelt aus apps/web/src/app/globals.css */
+  :root {
+    --color-bg: #f8fafc;
+    --color-bg-elevated: #f1f5f9;
+    --color-panel: #ffffff;
+    --color-line: #e2e8f0;
+    --color-line-soft: #f1f5f9;
+    --color-text: #0f172a;
+    --color-text-secondary: #334155;
+    --color-muted: #64748b;
+    --color-accent: #0d9488;
+    --color-accent-hover: #0f766e;
+    --color-accent-soft: #ccfbf1;
+    --color-danger: #ef4444;
+    --color-danger-soft: #fef2f2;
+    --color-success: #10b981;
+    --color-success-soft: #ecfdf5;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-card: 16px;
+    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "DM Sans", system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #0c0f17;
+      --color-bg-elevated: #151925;
+      --color-panel: #1a1f2e;
+      --color-line: #2a3040;
+      --color-line-soft: #1e2435;
+      --color-text: #f1f5f9;
+      --color-text-secondary: #cbd5e1;
+      --color-muted: #94a3b8;
+      --color-accent: #14b8a6;
+      --color-accent-hover: #2dd4bf;
+      --color-accent-soft: #0d3d38;
+      --color-danger: #f87171;
+      --color-danger-soft: #3b1111;
+      --color-success: #34d399;
+      --color-success-soft: #052e1c;
+      --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+      --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 20px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  header.hero {
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-accent);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .lede {
+    color: var(--color-muted);
+    font-size: 17px;
+    margin: 0;
+    max-width: 620px;
+  }
+
+  section.card {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    padding: 28px 28px 24px;
+    box-shadow: var(--shadow-card);
+    margin-bottom: 20px;
+  }
+  @media (max-width: 520px) {
+    .wrap { padding: 32px 16px 96px; }
+    h1 { font-size: 32px; }
+    section.card { padding: 22px 20px 18px; }
+  }
+  section.card h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  section.card h2 .num {
+    font-size: 13px;
+    color: var(--color-accent);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    font-family: var(--font-body);
+  }
+  section.card h3 {
+    font-family: var(--font-body);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-muted);
+    margin: 20px 0 8px;
+    font-weight: 600;
+  }
+  section.card p {
+    margin: 12px 0;
+    color: var(--color-text-secondary);
+    font-size: 15.5px;
+  }
+  section.card p strong { color: var(--color-text); }
+
+  .pillar {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-line-soft);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    margin: 12px 0 0;
+    font-family: var(--font-display);
+    font-size: 18px;
+    color: var(--color-text);
+    line-height: 1.4;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 8px;
+  }
+  @media (min-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+  }
+  .panel {
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    border: 1px solid var(--color-line);
+  }
+  .panel.no {
+    background: var(--color-danger-soft);
+    border-color: var(--color-danger-soft);
+  }
+  .panel.yes {
+    background: var(--color-success-soft);
+    border-color: var(--color-success-soft);
+  }
+  .panel .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .panel.no .label { color: var(--color-danger); }
+  .panel.yes .label { color: var(--color-success); }
+  .panel ul { margin: 0; padding-left: 18px; }
+  .panel li { font-size: 14.5px; color: var(--color-text); margin: 4px 0; }
+
+  ol.principles, ol.questions {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+  }
+  ol.principles li, ol.questions li {
+    counter-increment: step;
+    position: relative;
+    padding: 14px 16px 14px 52px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-line-soft);
+    border-radius: var(--radius-md);
+    margin-bottom: 10px;
+    font-size: 15px;
+    color: var(--color-text-secondary);
+  }
+  ol.principles li::before, ol.questions li::before {
+    content: counter(step);
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-body);
+  }
+  ol.principles li strong, ol.questions li strong { color: var(--color-text); }
+
+  .gate-note {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-left: 3px solid var(--color-accent);
+    background: var(--color-accent-soft);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: 14.5px;
+  }
+
+  ul.slots {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+  }
+  ul.slots li {
+    padding: 12px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    background: var(--color-panel);
+    font-size: 15px;
+  }
+  ul.slots li strong {
+    color: var(--color-accent);
+    font-weight: 600;
+    margin-right: 4px;
+  }
+
+  ul.anti {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+  }
+  ul.anti li {
+    padding: 10px 14px 10px 36px;
+    position: relative;
+    color: var(--color-text-secondary);
+    font-size: 14.5px;
+  }
+  ul.anti li::before {
+    content: "✕";
+    position: absolute;
+    left: 12px;
+    top: 10px;
+    color: var(--color-danger);
+    font-weight: 700;
+  }
+
+  footer.foot {
+    margin-top: 32px;
+    text-align: center;
+    color: var(--color-muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Strategie · Stand 09. April 2026</div>
+    <h1>TimeKeeper</h1>
+    <p class="lede">Ein KI-Betriebssystem für KMU. Wir verkaufen Ergebnisse, keine Software.</p>
+  </header>
+
+  <section class="card">
+    <h2><span class="num">01</span> Nordstern</h2>
+    <p class="pillar">TimeKeeper ist ein KI-Betriebssystem für KMU. Wir verkaufen Ergebnisse, keine Software.</p>
+    <p>Der Kunde misst uns daran, ob seine manuelle Arbeit abnimmt, seine Prozesse schneller werden und seine Daten endlich miteinander reden — nicht daran, wie viele Features im Tool stecken.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">02</span> Was wir bauen — und was nicht</h2>
+    <div class="grid-2">
+      <div class="panel no">
+        <div class="label">Bauen wir NICHT</div>
+        <ul>
+          <li>CRM, E-Mail-Marketing, Buchhaltung, ERP</li>
+          <li>Kalender, Telefonie-Backend</li>
+          <li>Eigene große Sprachmodelle</li>
+          <li>Generische Bürosoftware</li>
+        </ul>
+      </div>
+      <div class="panel yes">
+        <div class="label">Bauen wir SELBST</div>
+        <ul>
+          <li>Orchestrator zwischen Kundentools</li>
+          <li>Branchen- &amp; kundenspezifische Workflows</li>
+          <li>Berater-Cockpit zur Konfiguration</li>
+          <li>Custom Agents &amp; Prompts</li>
+          <li>Outcome-Reporting &amp; KPIs</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:18px"><strong>Kurz:</strong> Wir bauen die Schicht, die zwischen den Tools fehlt — nicht die Tools selbst.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">03</span> Architektur-Prinzipien</h2>
+    <ol class="principles">
+      <li><strong>Orchestrator + Glue, nie Tool-Klon.</strong> Jede neue Funktion stärkt Anbindung, Verarbeitung, Konfiguration oder Messung.</li>
+      <li><strong>Bronze → Silver → Gold.</strong> Externe Daten landen via <code>pgmq</code> in Bronze, werden in Silver normalisiert, in Gold für Agenten und Reporting bereitgestellt.</li>
+      <li><strong>Auditierbar by default.</strong> Jede Aktion eines Agenten oder Workflows hinterlässt eine Spur. KPI-Tracking ist Pflicht.</li>
+      <li><strong>Berater-First, Kunde-Second.</strong> Der Berater richtet ein und entscheidet, was der Kunde sieht.</li>
+      <li><strong>Multi-Tenant + branchenagnostischer Kern.</strong> Branchen-Spezifika gehören in Konfiguration und Prompts, nicht in den Code.</li>
+      <li><strong>Wiederverwendung vor Neuaufbau.</strong> Bestehende Bausteine sind die Standardpfade.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">04</span> Strategy Gate — die fünf Filterfragen</h2>
+    <p>Vor jeder nicht-trivialen Aufgabe wird gegen diese Fragen geprüft:</p>
+    <ol class="questions">
+      <li><strong>Orchestrator oder Klon?</strong> Stärkt es den Orchestrator/Glue — oder bauen wir ein fremdes Tool nach?</li>
+      <li><strong>Ergebnis oder Feature?</strong> Erzeugt es ein messbares Ergebnis (mit KPI), oder ist es nur Funktion?</li>
+      <li><strong>Multi-Tenant-fähig?</strong> Funktioniert es für mehrere Kunden &amp; Branchen — oder ist es ein One-Off?</li>
+      <li><strong>Baut es auf bestehende Bausteine?</strong> Nutzt es <code>pgmq</code>, <code>integration_providers</code>, <code>sources</code>, <code>chat_*</code>, <code>feature_flags</code>?</li>
+      <li><strong>Bleibt der Berater im Lead?</strong> Kann der Berater einrichten, kontrollieren und entscheiden, was der Kunde sieht?</li>
+    </ol>
+    <div class="gate-note"><strong>Wenn auch nur eine Antwort „nein" oder unklar ist → Aufgabe stoppen, bei den Gründern rückfragen.</strong> Lieber einmal nachfragen als drei Tage in die falsche Richtung bauen.</div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">05</span> Roadmap-Slots</h2>
+    <ul class="slots">
+      <li><strong>Connector-Katalog v1</strong> — saubere Trennung zwischen <em>read-only Sync</em> und <em>write-back / Action</em>, aufsetzend auf <code>integration_providers</code>.</li>
+      <li><strong>Berater-Cockpit</strong> — Pro-Kunden-Konfiguration: welche Quellen, welche Workflows, welche KPIs aktiv sind.</li>
+      <li><strong>Outcome-Templates pro Branche</strong> — vordefinierte Workflow- und Prompt-Pakete, die der Berater pro Kunde aktiviert.</li>
+      <li><strong>KPI-Dashboard</strong> — pro Kunde sichtbar machen, welche Ergebnisse die Plattform tatsächlich erzeugt.</li>
+      <li><strong>Pricing-Refresh</strong> — Plan-Tiers an Ergebnissen statt an Features ausrichten.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">06</span> Anti-Pattern</h2>
+    <ul class="anti">
+      <li>Eigenes CRM-, Mail- oder Buchhaltungs-UI nachbauen</li>
+      <li>Eigenes LLM trainieren oder feinabstimmen</li>
+      <li>Features, die nur für einen einzelnen Kunden Sinn ergeben</li>
+      <li>Datenflüsse an <code>pgmq</code>/Bronze-Silver-Gold vorbei</li>
+      <li>Agenten ohne Audit-Spur oder ohne KPI</li>
+      <li>Funktionen, die der Kunde sieht, ohne Berater-Freigabe</li>
+    </ul>
+  </section>
+
+  <footer class="foot">
+    Spiegel von <code>docs/strategie.md</code> · beide Dateien synchron halten
+  </footer>
+
+</div>
+</body>
+</html>

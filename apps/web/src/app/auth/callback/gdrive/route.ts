@@ -43,11 +43,17 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/quellen?error=no_refresh_token", req.url));
   }
 
-  await saveGdriveTokens({
-    refresh_token: data.refresh_token,
-    access_token: data.access_token,
-    expires_in: data.expires_in ?? 3600,
-  });
+  try {
+    await saveGdriveTokens({
+      refresh_token: data.refresh_token,
+      access_token: data.access_token,
+      expires_in: data.expires_in ?? 3600,
+    });
+  } catch (e) {
+    console.error("[gdrive callback] save failed:", e);
+    const msg = encodeURIComponent((e as Error).message ?? "save_failed");
+    return NextResponse.redirect(new URL(`/quellen?error=save:${msg}`, req.url));
+  }
 
   return NextResponse.redirect(new URL("/quellen?connected=gdrive", req.url));
 }

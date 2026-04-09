@@ -30,6 +30,17 @@ Wiederverwendbare AI Foundation Platform. Eigenes Startup = erster Tenant. Gleic
 8. **Business-Logik** in DB-Functions / Edge Functions, nicht in der App.
 9. **Card-Radius: `rounded-xl`** (16px). `rounded-2xl` nur für Modals/Bottom-Sheets.
 
+## Strategy Gate (Pflicht vor jeder Plan-/Implementierungsphase)
+
+Vor Planung oder Umsetzung jeder nicht-trivialen Aufgabe:
+
+1. `docs/strategie.md` lesen.
+2. Aufgabe gegen die fünf **Strategischen Filterfragen** prüfen (Orchestrator-vs-Klon · Ergebnis-vs-Feature · Multi-Tenant-fähig · baut auf bestehende Bausteine · Berater im Lead).
+3. Wenn die Aufgabe **klar passt** → normal weitermachen und im Plan einen kurzen Abschnitt **Strategy Fit** (1–2 Sätze) ergänzen, der begründet warum.
+4. Wenn die Aufgabe **nicht klar passt oder widerspricht** → NICHT bauen. Stattdessen den User per Rückfrage konfrontieren: welcher Teil der Strategie ist betroffen, welche Alternativen gibt es.
+
+Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere durchläuft das Gate.
+
 ## Deployment — Claude führt aus
 
 ```bash
@@ -57,5 +68,6 @@ NEXT_PUBLIC_APP_URL=
 
 ## Sub-Dokumentation
 
+- **Strategie / Nordstern** → `docs/strategie.md` (Pflichtlektüre via Strategy Gate · Präsentationsversion: `docs/strategie.html`)
 - **Frontend-Details** → `apps/web/CLAUDE.md`
 - **Datenbank / Migrations** → `supabase/CLAUDE.md`
