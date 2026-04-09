@@ -71,7 +71,7 @@ export async function saveSharepointTokens(tokens: {
   const db = createServiceClient();
   const expiresAt = new Date(Date.now() + (tokens.expires_in - 60) * 1000).toISOString();
 
-  await db
+  const { error } = await db
     .from("organization_integrations")
     .upsert(
       {
@@ -88,6 +88,11 @@ export async function saveSharepointTokens(tokens: {
       },
       { onConflict: "organization_id,provider_id" },
     );
+  if (error) {
+    console.error("[saveSharepointTokens] upsert failed:", error);
+    throw error;
+  }
+  revalidatePath("/quellen");
 }
 
 export async function saveGdriveTokens(tokens: {
@@ -99,7 +104,7 @@ export async function saveGdriveTokens(tokens: {
   const db = createServiceClient();
   const expiresAt = new Date(Date.now() + (tokens.expires_in - 60) * 1000).toISOString();
 
-  await db
+  const { error } = await db
     .from("organization_integrations")
     .upsert(
       {
@@ -116,4 +121,9 @@ export async function saveGdriveTokens(tokens: {
       },
       { onConflict: "organization_id,provider_id" },
     );
+  if (error) {
+    console.error("[saveGdriveTokens] upsert failed:", error);
+    throw error;
+  }
+  revalidatePath("/quellen");
 }
