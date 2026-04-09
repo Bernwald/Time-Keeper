@@ -78,14 +78,14 @@ Deno.serve(async (req) => {
 
       if (msg.source_id) {
         sourceId = msg.source_id;
+        // Only stage title/text/word_count here. status/sync_status flip to
+        // 'ready'/'success' happens below, after embeddings actually succeeded.
         const { error: updErr } = await supabase
           .from("sources")
           .update({
-            title:       msg.title,
-            raw_text:    text,
-            status:      "ready",
-            sync_status: "success",
-            word_count:  wordCount,
+            title:      msg.title,
+            raw_text:   text,
+            word_count: wordCount,
           })
           .eq("id", sourceId)
           .eq("organization_id", msg.organization_id);
@@ -144,12 +144,19 @@ Deno.serve(async (req) => {
         }
       }
 
-      // 2. Embed each chunk in parallel. If a single embedding call fails
-      //    (no API key, transient OpenAI error) we still persist the chunk
-      //    with embedding=null so FTS search keeps working.
-      const embeddings = await Promise.all(
-        chunks.map((c) => embedText(c.text).catch(() => null)),
-      );
+      // 2. Embed each chunk in parallel. Any failure must be loud — silently
+      //    persisting embedding=null masks rate limits / API key issues and
+      //    leaves the source flagged as "ready" while RAG search is broken.
+      const embeddings: (number[] | null)[] = [];
+      for (const c of chunks) {
+        const v = await embedText(c.text);
+        if (v == null) {
+          throw new Error(
+            `embedText returned null for source ${sourceId} chunk ${c.index} (check OPENAI key, rate limits, model errors)`,
+          );
+        }
+        embeddings.push(v);
+      }
 
       // 3. Replace existing chunks for this source.
       const { error: delErr } = await supabase
@@ -179,11 +186,30 @@ Deno.serve(async (req) => {
         .insert(rows);
       if (chunkErr) throw chunkErr;
 
+      // Embeddings persisted — flip the connector source to ready/success.
+      if (msg.source_id) {
+        await supabase
+          .from("sources")
+          .update({ status: "ready", sync_status: "success" })
+          .eq("id", sourceId)
+          .eq("organization_id", msg.organization_id);
+      }
+
       await ack(QUEUE, m.msg_id);
       processed++;
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
+      console.error("[worker-embed] failed", { msg_id: m.msg_id, source_id: msg.source_id, attempt: m.read_ct, error: error.message });
       if (m.read_ct >= MAX_ATTEMPTS_PER_MSG) {
+        // Permanent failure — mark the connector source as error so the user
+        // sees it in /quellen instead of stuck on "wartet" forever.
+        if (msg.source_id) {
+          await supabase
+            .from("sources")
+            .update({ sync_status: "error" })
+            .eq("id", msg.source_id)
+            .eq("organization_id", msg.organization_id);
+        }
         await deadLetter({
           queue:          QUEUE,
           msgId:          m.msg_id,

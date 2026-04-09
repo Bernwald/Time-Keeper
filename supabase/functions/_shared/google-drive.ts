@@ -57,7 +57,7 @@ export async function listDriveChanges(
       const url = new URL(`${DRIVE_API}/files`);
       url.searchParams.set("pageSize", "200");
       url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,md5Checksum,size,trashed)");
-      url.searchParams.set("q", "trashed = false");
+      url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
       if (nextFileToken) url.searchParams.set("pageToken", nextFileToken);
       const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -106,7 +106,7 @@ export async function listAllDriveFileIds(
     const url = new URL(`${DRIVE_API}/files`);
     url.searchParams.set("pageSize", "1000");
     url.searchParams.set("fields", "nextPageToken,files(id)");
-    url.searchParams.set("q", "trashed = false");
+    url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
     if (nextPageToken) url.searchParams.set("pageToken", nextPageToken);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
