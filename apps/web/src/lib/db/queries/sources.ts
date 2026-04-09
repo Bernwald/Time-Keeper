@@ -27,6 +27,7 @@ export async function listSources(options?: { limit?: number }): Promise<Source[
     .from("sources")
     .select("id, title, description, source_type, status, word_count, raw_text, storage_path, original_filename, created_at, updated_at, connector_type, sync_status, source_url")
     .eq("organization_id", orgId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(options?.limit ?? DEFAULT_LIMIT);
 
@@ -41,6 +42,7 @@ export async function countReadySources(): Promise<number> {
     .from("sources")
     .select("*", { count: "exact", head: true })
     .eq("organization_id", orgId)
+    .is("deleted_at", null)
     .eq("status", "ready");
   return count ?? 0;
 }
