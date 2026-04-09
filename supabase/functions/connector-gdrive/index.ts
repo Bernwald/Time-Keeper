@@ -87,10 +87,15 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
             console.warn("[gdrive] download failed:", fileId, err);
           }
         }
+        // Sanitize: Postgres JSONB rejects \u0000 (null bytes). Binary-ish
+        // files (xlsx, docx, pdf) sometimes surface them in metadata.
+        const cleanPayload = JSON.parse(
+          JSON.stringify({ ...ch, _extracted_text: text }).replace(/\\u0000/g, ""),
+        ) as Record<string, unknown>;
         records.push({
           external_id: fileId,
           entity_type: "drive_item",
-          payload: { ...ch, _extracted_text: text } as Record<string, unknown>,
+          payload: cleanPayload,
         });
       }
       return records;
