@@ -151,6 +151,21 @@ Deno.serve(async (req) => {
         const result = await debugListTree(token);
         return jsonResponse(result);
       }
+      if (action === "debug-walk") {
+        const { data: row } = await supabase
+          .from("organization_integrations")
+          .select("organization_id, credentials, config")
+          .eq("organization_id", body.organization_id)
+          .eq("provider_id", PROVIDER_ID)
+          .maybeSingle<IntegrationRow>();
+        if (!row) return errorResponse("no integration", 404);
+        const token = await getValidAccessToken(row);
+        const { changes } = await listDriveChanges(token, undefined);
+        return jsonResponse({
+          count: changes.length,
+          names: changes.map((c) => c.file?.name ?? c.fileId ?? "?"),
+        });
+      }
       const result =
         action === "reconcile"
           ? await reconcileOrg(body.organization_id)
