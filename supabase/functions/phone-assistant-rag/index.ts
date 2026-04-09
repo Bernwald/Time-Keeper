@@ -56,7 +56,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, x-vapi-signature",
+        "Access-Control-Allow-Headers": "Content-Type, x-vapi-secret, x-vapi-signature",
       },
     });
   }
@@ -68,7 +68,8 @@ Deno.serve(async (req: Request) => {
   const bodyText = await req.text();
 
   // Verify webhook signature
-  const signature = req.headers.get("x-vapi-signature");
+  const signature =
+    req.headers.get("x-vapi-secret") ?? req.headers.get("x-vapi-signature");
   const valid = await verifyVapiSignature(bodyText, signature);
   if (!valid) {
     return errorResponse("Invalid signature", 401);

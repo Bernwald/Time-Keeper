@@ -7,6 +7,8 @@ import { btn } from "@/components/ui/table-classes";
 
 type CallState = "idle" | "connecting" | "active" | "ended" | "error";
 
+type CallEndEvent = { endedReason?: string } | undefined;
+
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -17,18 +19,31 @@ export function TestCallButton() {
   const [callState, setCallState] = useState<CallState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
+  const [endedReason, setEndedReason] = useState<string | null>(null);
   const vapiRef = useRef<Vapi | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const callStateRef = useRef<CallState>("idle");
+
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
 
   useEffect(() => {
     return () => {
-      vapiRef.current?.stop();
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (vapiRef.current) {
+        vapiRef.current.stop();
+        vapiRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, []);
 
   const startCall = useCallback(async () => {
     setError(null);
+    setEndedReason(null);
     setCallState("connecting");
     setDuration(0);
 
@@ -55,18 +70,33 @@ export function TestCallButton() {
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
     });
 
-    vapi.on("call-end", () => {
+    vapi.on("call-end", (evt: CallEndEvent) => {
+      const reason = evt?.endedReason ?? null;
+      console.info("[vapi] call-end", evt);
+      setEndedReason(reason);
       setCallState("ended");
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     });
 
     vapi.on("error", (e) => {
+      console.error("[vapi] error event", e);
       const msg = typeof e === "object" && e !== null && "message" in e
         ? String((e as { message: string }).message)
         : "Verbindungsfehler";
-      setError(msg);
-      setCallState("error");
-      if (timerRef.current) clearInterval(timerRef.current);
+      // Only flip to error state when the call is not yet active.
+      // Mid-call errors are often non-fatal; the call-end event will
+      // eventually fire if the connection truly drops.
+      if (callStateRef.current !== "active") {
+        setError(msg);
+        setCallState("error");
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+      }
     });
 
     try {
@@ -165,6 +195,7 @@ export function TestCallButton() {
           style={{ color: "var(--color-muted)" }}
         >
           Anruf beendet — Dauer: {formatDuration(duration)}
+          {endedReason ? ` · Grund: ${endedReason}` : ""}
         </div>
       )}
 

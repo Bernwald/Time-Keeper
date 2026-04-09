@@ -247,6 +247,8 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
   }
 
   const result = await vapiRequest(`/assistant/${pa.provider_assistant_id}`, "PATCH", {
+    serverUrl,
+    serverUrlSecret: process.env.VAPI_SECRET ?? undefined,
     model: {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
