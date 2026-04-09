@@ -13,30 +13,31 @@ function getOpenAIKey(): string | undefined {
 
 export async function embedText(text: string): Promise<number[] | null> {
   const apiKey = getOpenAIKey();
-  if (!apiKey) return null;
-
-  try {
-    const response = await fetch(OPENAI_EMBEDDING_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        input: text,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Embedding API error:", response.status, await response.text());
-      return null;
-    }
-
-    const data = await response.json();
-    return data?.data?.[0]?.embedding ?? null;
-  } catch (err) {
-    console.error("Embedding error:", err);
-    return null;
+  if (!apiKey) {
+    throw new Error("OPENAI key not set (OPENAI_RESEARCH_TIMEKEEPER_KEY or OPENAI_API_KEY)");
   }
+
+  const response = await fetch(OPENAI_EMBEDDING_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      input: text,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI embeddings ${response.status}: ${body.slice(0, 500)}`);
+  }
+
+  const data = await response.json();
+  const vec = data?.data?.[0]?.embedding;
+  if (!vec) {
+    throw new Error(`OpenAI embeddings: missing embedding in response: ${JSON.stringify(data).slice(0, 500)}`);
+  }
+  return vec;
 }

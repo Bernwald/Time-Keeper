@@ -147,15 +147,9 @@ Deno.serve(async (req) => {
       // 2. Embed each chunk in parallel. Any failure must be loud — silently
       //    persisting embedding=null masks rate limits / API key issues and
       //    leaves the source flagged as "ready" while RAG search is broken.
-      const embeddings: (number[] | null)[] = [];
+      const embeddings: number[][] = [];
       for (const c of chunks) {
-        const v = await embedText(c.text);
-        if (v == null) {
-          throw new Error(
-            `embedText returned null for source ${sourceId} chunk ${c.index} (check OPENAI key, rate limits, model errors)`,
-          );
-        }
-        embeddings.push(v);
+        embeddings.push(await embedText(c.text) as number[]);
       }
 
       // 3. Replace existing chunks for this source.
