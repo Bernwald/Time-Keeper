@@ -80,7 +80,12 @@ export async function listDriveChanges(
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`drive changes ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = await res.json();
-    for (const c of (data.changes ?? []) as DriveChange[]) changes.push(c);
+    for (const c of (data.changes ?? []) as DriveChange[]) {
+      // Drive Changes API has no q-filter, so folders sneak back in here.
+      // Drop them in code to match the files.list folder filter.
+      if (c.file?.mimeType === "application/vnd.google-apps.folder") continue;
+      changes.push(c);
+    }
     if (data.nextPageToken) {
       token = data.nextPageToken;
     } else {
