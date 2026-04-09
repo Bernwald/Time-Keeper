@@ -4,7 +4,7 @@ import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
 import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
 import { AutoRefreshWhileSyncing } from "./auto-refresh";
-import { RetryButton } from "./retry-button";
+import { RetryButton, DeleteButton, ReconcileButton } from "./retry-button";
 
 export const dynamic = "force-dynamic";
 
@@ -269,11 +269,14 @@ function ConnectorCard(props: {
               </button>
             </form>
           ) : (
-            <form action={triggerInitialSync.bind(null, providerId)}>
-              <button type="submit" className={btn.secondary} style={styles.panel}>
-                Jetzt synchronisieren
-              </button>
-            </form>
+            <>
+              <form action={triggerInitialSync.bind(null, providerId)}>
+                <button type="submit" className={btn.secondary} style={styles.panel}>
+                  Jetzt synchronisieren
+                </button>
+              </form>
+              {providerId === "google_drive" && <ReconcileButton providerId={providerId} />}
+            </>
           )}
         </div>
       </div>
@@ -362,6 +365,7 @@ function ConnectorCard(props: {
                       </a>
                     )}
                     <RetryButton sourceId={f.id} />
+                    <DeleteButton sourceId={f.id} />
                   </div>
                 </li>
               );

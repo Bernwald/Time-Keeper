@@ -115,6 +115,61 @@ export async function retrySource(sourceId: string): Promise<void> {
   revalidatePath("/sources");
 }
 
+// Manual reconcile: drop every connector source whose Drive counterpart is
+// gone. Surfaces the count back to the page via search params.
+export async function reconcileConnector(
+  providerId: "google_drive" | "sharepoint",
+): Promise<void> {
+  const orgId = await requireOrgId();
+  const url =
+    providerId === "sharepoint"
+      ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-sharepoint`
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-gdrive`;
+
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ action: "reconcile", organization_id: orgId }),
+  });
+
+  revalidatePath("/quellen");
+  revalidatePath("/papierkorb");
+}
+
+// Soft-delete a single source — moves it into the trash.
+export async function deleteSource(sourceId: string): Promise<void> {
+  await requireOrgId();
+  const db = createServiceClient();
+  const { error } = await db.rpc("soft_delete_source", { p_source_id: sourceId });
+  if (error) throw error;
+  revalidatePath("/quellen");
+  revalidatePath("/sources");
+  revalidatePath("/papierkorb");
+}
+
+// Restore a soft-deleted source — clears deleted_at and requeues it.
+export async function restoreSource(sourceId: string): Promise<void> {
+  await requireOrgId();
+  const db = createServiceClient();
+  const { error } = await db.rpc("restore_source", { p_source_id: sourceId });
+  if (error) throw error;
+  revalidatePath("/quellen");
+  revalidatePath("/sources");
+  revalidatePath("/papierkorb");
+}
+
+// Hard-delete a soft-deleted source. Point of no return.
+export async function purgeSource(sourceId: string): Promise<void> {
+  await requireOrgId();
+  const db = createServiceClient();
+  const { error } = await db.rpc("purge_source", { p_source_id: sourceId });
+  if (error) throw error;
+  revalidatePath("/papierkorb");
+}
+
 // Persist OAuth tokens after successful callback.
 export async function saveSharepointTokens(tokens: {
   refresh_token: string;

@@ -92,6 +92,31 @@ export async function listDriveChanges(
   return { changes, nextPageToken: newPageToken };
 }
 
+/**
+ * Page through `files.list` and collect every visible file id. Used by the
+ * reconciliation pass to soft-delete sources whose Drive counterpart has
+ * disappeared (deleted, trashed, access revoked, moved out of scope).
+ */
+export async function listAllDriveFileIds(
+  accessToken: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let nextPageToken: string | undefined;
+  do {
+    const url = new URL(`${DRIVE_API}/files`);
+    url.searchParams.set("pageSize", "1000");
+    url.searchParams.set("fields", "nextPageToken,files(id)");
+    url.searchParams.set("q", "trashed = false");
+    if (nextPageToken) url.searchParams.set("pageToken", nextPageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    for (const f of (data.files ?? []) as { id: string }[]) ids.push(f.id);
+    nextPageToken = data.nextPageToken;
+  } while (nextPageToken);
+  return ids;
+}
+
 export async function downloadDriveFileText(
   accessToken: string,
   fileId: string,

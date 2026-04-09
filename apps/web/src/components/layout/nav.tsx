@@ -139,7 +139,8 @@ const groups: NavGroup[] = [
     label: "Wissen",
     items: [
       { href: "/quellen", label: "Quellen", icon: IconSources },
-      { href: "/sources", label: "Dateien (alt)", icon: IconImport },
+      { href: "/sources", label: "Dateien", icon: IconImport },
+      { href: "/papierkorb", label: "Papierkorb", icon: IconImport },
       { href: "/search", label: "Suche", icon: IconSearch },
       { href: "/chat", label: "Chat", icon: IconChat },
     ],

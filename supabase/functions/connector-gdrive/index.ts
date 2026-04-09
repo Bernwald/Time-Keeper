@@ -8,6 +8,7 @@ import {
   refreshGoogleAccessToken,
   listDriveChanges,
   downloadDriveFileText,
+  listAllDriveFileIds,
 } from "../_shared/google-drive.ts";
 
 const PROVIDER_ID = "google_drive";
@@ -96,6 +97,32 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
   });
 }
 
+// Reconcile pass: pull a fresh snapshot of every visible Drive file id and
+// soft-delete every source whose external_id is no longer in that set.
+// Used by the daily cron and the manual "Aufräumen" button on /quellen.
+async function reconcileOrg(orgId: string): Promise<{ removed: number }> {
+  const supabase = getServiceClient();
+  const { data: row, error } = await supabase
+    .from("organization_integrations")
+    .select("organization_id, credentials, config")
+    .eq("organization_id", orgId)
+    .eq("provider_id", PROVIDER_ID)
+    .eq("status", "active")
+    .maybeSingle<IntegrationRow>();
+  if (error) throw error;
+  if (!row) throw new Error("no active google_drive integration");
+
+  const accessToken = await getValidAccessToken(row);
+  const ids = await listAllDriveFileIds(accessToken);
+  const { data: removed, error: rpcErr } = await supabase.rpc("reconcile_drive_sources", {
+    p_org_id: orgId,
+    p_connector: "gdrive",
+    p_existing_ids: ids,
+  });
+  if (rpcErr) throw rpcErr;
+  return { removed: (removed as number) ?? 0 };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 
@@ -111,10 +138,13 @@ Deno.serve(async (req) => {
 
   if (body.organization_id) {
     try {
-      const result = await syncOrg(
-        body.organization_id,
-        action === "initial-sync" ? "initial" : "delta",
-      );
+      const result =
+        action === "reconcile"
+          ? await reconcileOrg(body.organization_id)
+          : await syncOrg(
+              body.organization_id,
+              action === "initial-sync" ? "initial" : "delta",
+            );
       return jsonResponse(result);
     } catch (err) {
       return errorResponse(err instanceof Error ? err.message : String(err), 500);
@@ -130,7 +160,11 @@ Deno.serve(async (req) => {
   const results: unknown[] = [];
   for (const r of (rows ?? []) as { organization_id: string }[]) {
     try {
-      results.push(await syncOrg(r.organization_id, "delta"));
+      if (action === "reconcile") {
+        results.push({ organization_id: r.organization_id, ...(await reconcileOrg(r.organization_id)) });
+      } else {
+        results.push(await syncOrg(r.organization_id, "delta"));
+      }
     } catch (err) {
       results.push({ organization_id: r.organization_id, error: err instanceof Error ? err.message : String(err) });
     }
