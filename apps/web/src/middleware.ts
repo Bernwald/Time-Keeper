@@ -32,6 +32,9 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isDedicated = process.env.INSTANCE_MODE === "dedicated";
 
+  // OAuth callback routes must always pass through, regardless of auth state
+  const isOAuthCallback = pathname.startsWith("/auth/callback/");
+
   // Not authenticated → redirect to login (except auth pages)
   if (!user && !pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
@@ -39,8 +42,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated but on auth pages → redirect to home
-  if (user && pathname.startsWith("/auth")) {
+  // Authenticated but on auth pages → redirect to home (but never on OAuth callbacks)
+  if (user && pathname.startsWith("/auth") && !isOAuthCallback) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
