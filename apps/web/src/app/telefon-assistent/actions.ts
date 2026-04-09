@@ -183,9 +183,17 @@ export async function provisionVapiAssistant(): Promise<{ ok: boolean; error?: s
       tools: serverTools,
     },
     voice: { provider: "openai", voiceId: pa.voice_id_de ?? "alloy" },
+    transcriber: {
+      provider: "deepgram",
+      model: "nova-2",
+      language: "multi",
+      endpointing: 300,
+    },
+    startSpeakingPlan: { waitSeconds: 0.6 },
+    stopSpeakingPlan: { numWords: 3, voiceSeconds: 0.4, backoffSeconds: 1 },
     firstMessage: pa.greeting_de ?? "Hallo, wie kann ich Ihnen helfen?",
     maxDurationSeconds: pa.max_call_duration_seconds ?? 600,
-    silenceTimeoutSeconds: 30,
+    silenceTimeoutSeconds: 60,
     endCallMessage: "Vielen Dank fuer Ihren Anruf. Auf Wiedersehen!",
   });
 
@@ -259,8 +267,17 @@ export async function syncVapiConfig(): Promise<{ ok: boolean; error?: string }>
       provider: "openai",
       voiceId: pa.language_mode === "en" ? pa.voice_id_en : pa.voice_id_de,
     },
+    transcriber: {
+      provider: "deepgram",
+      model: "nova-2",
+      language: pa.language_mode === "en" ? "en" : "multi",
+      endpointing: 300,
+    },
+    startSpeakingPlan: { waitSeconds: 0.6 },
+    stopSpeakingPlan: { numWords: 3, voiceSeconds: 0.4, backoffSeconds: 1 },
     firstMessage: pa.language_mode === "en" ? pa.greeting_en : pa.greeting_de,
     maxDurationSeconds: pa.max_call_duration_seconds,
+    silenceTimeoutSeconds: 60,
   });
 
   if (!result.ok) {
