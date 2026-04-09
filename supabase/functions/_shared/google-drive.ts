@@ -60,7 +60,6 @@ export async function listDriveChanges(
       url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
       url.searchParams.set("supportsAllDrives", "true");
       url.searchParams.set("includeItemsFromAllDrives", "true");
-      url.searchParams.set("corpora", "allDrives");
       if (nextFileToken) url.searchParams.set("pageToken", nextFileToken);
       const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
