@@ -41,6 +41,83 @@ export async function getStartPageToken(accessToken: string): Promise<string> {
  * List file changes since `pageToken`. If no pageToken given, do a full
  * listing of the user's files (initial sync).
  */
+/**
+ * Walk the Drive tree starting from every folder the user either owns or
+ * that has been shared with them. Necessary because files.list with
+ * corpora=user only surfaces directly-shared files — files that are only
+ * accessible via an inherited folder share (e.g. a colleague drops a file
+ * into a folder we own or that is shared with us) never appear unless we
+ * explicitly query "<parent> in parents".
+ */
+async function listAllFilesRecursive(accessToken: string): Promise<DriveFile[]> {
+  const files = new Map<string, DriveFile>();
+  const visitedFolders = new Set<string>();
+
+  async function listChildren(q: string): Promise<DriveFile[]> {
+    const out: DriveFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const url = new URL(`${DRIVE_API}/files`);
+      url.searchParams.set("pageSize", "1000");
+      url.searchParams.set(
+        "fields",
+        "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,md5Checksum,size,trashed)",
+      );
+      url.searchParams.set("q", q);
+      url.searchParams.set("supportsAllDrives", "true");
+      url.searchParams.set("includeItemsFromAllDrives", "true");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) {
+        throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      }
+      const data = await res.json();
+      for (const f of (data.files ?? []) as DriveFile[]) out.push(f);
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+    return out;
+  }
+
+  // Seed: every top-level item the user can see (owned + shared with me +
+  // root folder contents). This grabs folders we'll descend into as well as
+  // loose files sitting at the roots.
+  const seeds = await listChildren(
+    "trashed = false and ('me' in owners or sharedWithMe = true or 'root' in parents)",
+  );
+
+  const queue: string[] = [];
+  for (const f of seeds) {
+    if (f.mimeType === "application/vnd.google-apps.folder") {
+      if (!visitedFolders.has(f.id)) {
+        visitedFolders.add(f.id);
+        queue.push(f.id);
+      }
+    } else {
+      files.set(f.id, f);
+    }
+  }
+
+  // BFS through folders, listing children of each. New subfolders are queued.
+  while (queue.length > 0) {
+    const folderId = queue.shift()!;
+    const children = await listChildren(
+      `trashed = false and '${folderId}' in parents`,
+    );
+    for (const f of children) {
+      if (f.mimeType === "application/vnd.google-apps.folder") {
+        if (!visitedFolders.has(f.id)) {
+          visitedFolders.add(f.id);
+          queue.push(f.id);
+        }
+      } else {
+        files.set(f.id, f);
+      }
+    }
+  }
+
+  return [...files.values()];
+}
+
 export async function listDriveChanges(
   accessToken: string,
   pageToken?: string,
@@ -50,26 +127,12 @@ export async function listDriveChanges(
   let newPageToken: string | null = null;
 
   if (!token) {
-    // Initial sync: enumerate files via files.list, then capture a fresh
-    // startPageToken so the next run only sees deltas.
-    let nextFileToken: string | undefined;
-    do {
-      const url = new URL(`${DRIVE_API}/files`);
-      url.searchParams.set("pageSize", "200");
-      url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,md5Checksum,size,trashed)");
-      url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
-      url.searchParams.set("supportsAllDrives", "true");
-      url.searchParams.set("includeItemsFromAllDrives", "true");
-      if (nextFileToken) url.searchParams.set("pageToken", nextFileToken);
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-      if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const data = await res.json();
-      for (const f of (data.files ?? []) as DriveFile[]) {
-        changes.push({ fileId: f.id, file: f });
-      }
-      nextFileToken = data.nextPageToken;
-    } while (nextFileToken);
-
+    // Initial sync: walk the whole tree (handles inherited folder shares),
+    // then capture a fresh startPageToken so the next run only sees deltas.
+    const allFiles = await listAllFilesRecursive(accessToken);
+    for (const f of allFiles) {
+      changes.push({ fileId: f.id, file: f });
+    }
     newPageToken = await getStartPageToken(accessToken);
     return { changes, nextPageToken: newPageToken };
   }
@@ -109,24 +172,10 @@ export async function listDriveChanges(
 export async function listAllDriveFileIds(
   accessToken: string,
 ): Promise<string[]> {
-  const ids: string[] = [];
-  let nextPageToken: string | undefined;
-  do {
-    const url = new URL(`${DRIVE_API}/files`);
-    url.searchParams.set("pageSize", "1000");
-    url.searchParams.set("fields", "nextPageToken,files(id)");
-    url.searchParams.set("q", "trashed = false and mimeType != 'application/vnd.google-apps.folder'");
-    url.searchParams.set("supportsAllDrives", "true");
-    url.searchParams.set("includeItemsFromAllDrives", "true");
-    url.searchParams.set("corpora", "allDrives");
-    if (nextPageToken) url.searchParams.set("pageToken", nextPageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error(`drive files.list ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = await res.json();
-    for (const f of (data.files ?? []) as { id: string }[]) ids.push(f.id);
-    nextPageToken = data.nextPageToken;
-  } while (nextPageToken);
-  return ids;
+  // Same tree walk as the initial sync so reconcile sees exactly the
+  // files the sync would have ingested.
+  const files = await listAllFilesRecursive(accessToken);
+  return files.map((f) => f.id);
 }
 
 export async function downloadDriveFileText(
