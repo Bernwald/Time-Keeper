@@ -70,7 +70,7 @@ export function TestCallButton() {
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
     });
 
-    vapi.on("call-end", (evt: CallEndEvent) => {
+    (vapi.on as (event: "call-end", cb: (evt: CallEndEvent) => void) => void)("call-end", (evt) => {
       const reason = evt?.endedReason ?? null;
       console.info("[vapi] call-end", evt);
       setEndedReason(reason);
