@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TimeKeeper — Google Drive Sync-Prozess</title>
+<style>
+  :root {
+    --bg:        #faf8f5;
+    --panel:     #ffffff;
+    --line:      #e8e3dc;
+    --text:      #1a1814;
+    --muted:     #6b6660;
+    --accent:    #b8753a;
+    --accent-soft:#f3e7d6;
+    --warn:      #c7503a;
+    --ok:        #4a7d4a;
+    --code-bg:   #f3efe8;
+    --shadow:    0 2px 8px rgba(0,0,0,.04);
+    --radius:    16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14110d;
+      --panel:     #1c1814;
+      --line:      #2d2823;
+      --text:      #f0ebe2;
+      --muted:     #8a8378;
+      --accent:    #d99659;
+      --accent-soft:#3a2a18;
+      --warn:      #e57058;
+      --ok:        #7ab07a;
+      --code-bg:   #0f0c09;
+      --shadow:    0 2px 8px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; line-height: 1.55; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 96px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 40px 0 12px; }
+  h3 { font-size: 15px; margin: 20px 0 8px; color: var(--text); }
+  p.lede { color: var(--muted); margin: 0 0 24px; max-width: 760px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  code {
+    background: var(--code-bg); padding: 1px 6px; border-radius: 4px;
+    font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 0.88em;
+    color: var(--text);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; overflow-x: auto;
+    font-family: "SF Mono", Consolas, Monaco, monospace; font-size: 12px;
+    line-height: 1.5; margin: 8px 0 16px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 18px 20px; margin: 14px 0;
+    box-shadow: var(--shadow);
+  }
+  .card.accent { border-color: var(--accent); background: var(--accent-soft); }
+  .card.warn { border-color: var(--warn); }
+  .card.ok   { border-color: var(--ok); }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .pill.muted { background: var(--bg); color: var(--muted); border-color: var(--line); }
+  .pill.ok    { background: var(--panel); color: var(--ok);    border-color: var(--ok); }
+  .pill.warn  { background: var(--panel); color: var(--warn);  border-color: var(--warn); }
+  .flow {
+    display: flex; flex-direction: column; gap: 8px; margin: 12px 0;
+  }
+  .step {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; position: relative;
+  }
+  .step .num {
+    position: absolute; left: -14px; top: 14px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: var(--panel);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+    border: 3px solid var(--bg);
+  }
+  .step .title { font-weight: 600; margin-bottom: 4px; }
+  .step .meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .step .body { font-size: 14px; }
+  .step code.path { font-size: 11px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
+  th, td {
+    border: 1px solid var(--line); padding: 8px 10px; text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--bg); font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  tr:nth-child(even) td { background: var(--bg); }
+  .toc {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; margin: 16px 0 32px; font-size: 13px;
+  }
+  .toc ol { margin: 6px 0 0; padding-left: 20px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .grid2 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 720px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
+  .small { font-size: 12px; color: var(--muted); }
+  .badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Google Drive Sync — Vollständiger Prozess</h1>
+<p class="lede">
+  End-to-End-Dokumentation des Ingest-Pfads von Google Drive über raw_events → normalize →
+  embed bis zur RAG-Suche. Inklusive aller automatischen Trigger, Parser, Fehlerpfade und
+  wichtigen Code-Stellen. Stand: 09.04.2026.
+</p>
+
+<div class="toc">
+  <strong>Inhalt</strong>
+  <ol>
+    <li><a href="#ueberblick">Überblick</a></li>
+    <li><a href="#trigger">Automatische Trigger & Timings</a></li>
+    <li><a href="#discovery">Dateidiscovery (Drive API)</a></li>
+    <li><a href="#parser">Parser & Textextraktion</a></li>
+    <li><a href="#pipeline">Pipeline raw_events → normalize → embed</a></li>
+    <li><a href="#status">Status-Modell</a></li>
+    <li><a href="#errors">Fehler & Retry</a></li>
+    <li><a href="#manual">Manuelle Aktionen in der UI</a></li>
+    <li><a href="#files">Wichtige Code-Dateien</a></li>
+    <li><a href="#env">Secrets & Env</a></li>
+    <li><a href="#troubleshooting">Troubleshooting-Rezepte</a></li>
+  </ol>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="ueberblick">1 · Überblick</h2>
+
+<div class="card">
+  <p>
+    Der Google-Drive-Connector holt periodisch Dateien aus dem verknüpften Drive-Account,
+    legt sie als <code>raw_events</code> ab, normalisiert sie, erzeugt Embeddings und stellt
+    den Inhalt in der Chat-/RAG-Suche bereit. Das Ganze läuft als mehrstufige Queue-Pipeline
+    auf Supabase Edge Functions und pgmq, angetrieben durch pg_cron.
+  </p>
+  <p>
+    <strong>Pipeline-Stufen:</strong>
+  </p>
+  <div class="flow">
+    <div class="step">
+      <div class="num">1</div>
+      <div class="title">connector-gdrive</div>
+      <div class="meta">Edge Function · holt Dateien aus Drive API</div>
+      <div class="body">Walkt Drive-Baum, lädt Bytes/Text, schreibt in <code>raw_events</code>,
+      enqueued in <code>normalize</code>.</div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="title">worker-normalize</div>
+      <div class="meta">pgmq-Worker · alle 30 s</div>
+      <div class="body">Liest aus <code>normalize</code>-Queue, ruft
+      <code>upsert_connector_source(...)</code> und enqueued in <code>embed</code>.</div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div class="title">worker-embed</div>
+      <div class="meta">pgmq-Worker · alle 30 s</div>
+      <div class="body">Chunkt Text, ruft OpenAI-Embeddings, schreibt <code>content_chunks</code>,
+      flippt <code>sources.status = 'ready'</code> + <code>sync_status = 'success'</code>.</div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div class="title">RAG-Search</div>
+      <div class="meta">Chat + Telefonassistent</div>
+      <div class="body">Vector-Similarity-Search über <code>content_chunks.embedding</code>.</div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="trigger">2 · Automatische Trigger & Timings</h2>
+
+<table>
+  <thead>
+    <tr><th>Was</th><th>Zeitplan</th><th>Implementiert als</th><th>Zweck</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Delta-Sync</strong> (gdrive)</td>
+      <td>alle ~5 min via pg_cron</td>
+      <td><code>cron.schedule('gdrive-delta-...')</code> → <code>invoke_edge_function('connector-gdrive', {"action":"delta-sync"})</code></td>
+      <td>Holt Drive-Änderungen seit letztem <code>page_token</code> (Changes API).</td>
+    </tr>
+    <tr>
+      <td><strong>Reconcile</strong> (gdrive)</td>
+      <td>täglich <code>17 3 * * *</code> (03:17 UTC)</td>
+      <td><code>cron.schedule('reconcile-connectors-daily', ...)</code></td>
+      <td>Full-Listing, entfernt verwaiste Sources (soft-delete).</td>
+    </tr>
+    <tr>
+      <td><strong>worker-normalize</strong></td>
+      <td>alle 30 s</td>
+      <td><code>cron.schedule('worker-normalize-30s', '30 seconds', ...)</code></td>
+      <td>Drainiert <code>pgmq.q_normalize</code>, ruft DB-RPC upsert.</td>
+    </tr>
+    <tr>
+      <td><strong>worker-embed</strong></td>
+      <td>alle 30 s</td>
+      <td><code>cron.schedule('worker-embed-30s', '30 seconds', ...)</code></td>
+      <td>Drainiert <code>pgmq.q_embed</code>, erzeugt Embeddings.</td>
+    </tr>
+    <tr>
+      <td><strong>Full-Resync + Reconcile</strong></td>
+      <td>manuell</td>
+      <td>UI-Button „Aufräumen" → <code>reconcileConnector()</code> in <code>apps/web/src/app/quellen/actions.ts</code></td>
+      <td>Initial-Sync + Reconcile sequentiell.</td>
+    </tr>
+    <tr>
+      <td><strong>Initial-Sync</strong></td>
+      <td>manuell oder nach OAuth-Verknüpfung</td>
+      <td>Button „Jetzt synchronisieren" → <code>triggerInitialSync()</code></td>
+      <td>Vollständiger Tree-Walk (nicht Changes-API), setzt frischen <code>page_token</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Erneut verarbeiten</strong></td>
+      <td>manuell pro Datei</td>
+      <td>RetryButton → <code>retrySource()</code></td>
+      <td>Setzt <code>sync_status='queued'</code>, enqueued normalize-Msg mit letztem raw_event.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+  <p class="small">
+    <strong>Queue-Durchsatz:</strong> batch 25 Messages pro Worker-Tick,
+    visibility_timeout 60 s, max 5 Retries pro Message, danach dead-letter
+    in <code>job_failures</code>.
+  </p>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="discovery">3 · Dateidiscovery (Drive API)</h2>
+
+<p>
+  Zwei Modi — abhängig davon, ob bereits ein <code>page_token</code> in
+  <code>organization_integrations.config</code> gespeichert ist.
+</p>
+
+<h3>3.1 Initial-Sync (kein page_token)</h3>
+
+<div class="card">
+  <p><strong>Rekursiver Tree-Walk</strong> — pflichtweise, weil <code>files.list</code> mit
+  <code>corpora=user</code> keine Dateien aus <em>geteilten Ordnern</em> zurückgibt, wenn der
+  User nur über Ordnervererbung Zugriff hat (z. B. jemand hat in deinem Timekeeper-Ordner
+  ein Dokument hochgeladen).</p>
+
+  <p><strong>Ablauf in <code>listAllFilesRecursive()</code>:</strong></p>
+  <ol>
+    <li>Seed 1: alle Ordner des Users (<code>'me' in owners</code>) — als folder-Query.</li>
+    <li>Seed 2: alle „Mit mir geteilten" Ordner (<code>sharedWithMe = true</code>).</li>
+    <li>Seed 3: eigene + mit mir geteilte Files (nicht-Ordner) direkt einsammeln.</li>
+    <li>BFS: für jeden gefundenen Ordner <code>'&lt;folderId&gt;' in parents</code>
+    abfragen — sammelt auch Dateien ein, die anderen gehören aber im geteilten
+    Ordner liegen.</li>
+    <li>Dedupliziert per <code>Map&lt;id, DriveFile&gt;</code>.</li>
+    <li>Nach Walk: frischen <code>startPageToken</code> holen und in <code>config.page_token</code> speichern.</li>
+  </ol>
+
+  <p><strong>Query-Parameter in jedem Call:</strong></p>
+<pre>q=trashed = false and mimeType != 'application/vnd.google-apps.folder'
+supportsAllDrives=true
+includeItemsFromAllDrives=true
+pageSize=1000</pre>
+
+  <p>Datei: <code>supabase/functions/_shared/google-drive.ts</code></p>
+</div>
+
+<h3>3.2 Delta-Sync (mit page_token)</h3>
+
+<div class="card">
+  <p>
+    Nutzt <code>drive/v3/changes</code> mit dem gespeicherten <code>page_token</code>.
+    Die Changes API liefert automatisch alles, was sich seit dem Token geändert hat.
+    Ordner werden im Code ausgefiltert (die Changes API akzeptiert keinen
+    <code>q</code>-Filter).
+  </p>
+  <p class="small">
+    <strong>Caveat:</strong> Drive's Changes API sieht manchmal Dateien in
+    geteilten Unterordnern nicht sofort. Deshalb gibt es den täglichen
+    Reconcile + die manuelle „Aufräumen"-Aktion mit Full-Resync.
+  </p>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="parser">4 · Parser & Textextraktion</h2>
+
+<p>
+  Der Drive-Connector versucht für jede Datei Text zu extrahieren und legt das Ergebnis
+  als <code>_extracted_text</code> im raw_events-Payload ab. Der embed-Worker nutzt
+  diesen Text direkt — ohne eigene Extraktion.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Typ</th><th>MIME</th><th>Parser</th><th>Ergebnis</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Google Docs</td>
+      <td><code>vnd.google-apps.document</code></td>
+      <td>Drive Export <code>text/plain</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>Google Sheets</td>
+      <td><code>vnd.google-apps.spreadsheet</code></td>
+      <td>Drive Export <code>text/csv</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>Google Slides</td>
+      <td><code>vnd.google-apps.presentation</code></td>
+      <td>Drive Export <code>text/plain</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>Word (.docx)</td>
+      <td><code>...wordprocessingml.document</code></td>
+      <td>JSZip → <code>word/document.xml</code> → XML-Strip</td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>Excel (.xlsx)</td>
+      <td><code>...spreadsheetml.sheet</code></td>
+      <td>JSZip → <code>xl/sharedStrings.xml</code> + <code>xl/worksheets/sheet*.xml</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>PowerPoint (.pptx)</td>
+      <td><code>...presentationml.presentation</code></td>
+      <td>JSZip → <code>ppt/slides/slide*.xml</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>HTML / Markdown / JSON / CSV / XML / Plain Text</td>
+      <td><code>text/*</code>, <code>application/json</code>, …</td>
+      <td><code>alt=media</code> + <code>response.text()</code></td>
+      <td><span class="pill ok">voll</span></td>
+    </tr>
+    <tr>
+      <td>Google Forms</td>
+      <td><code>vnd.google-apps.form</code></td>
+      <td>—</td>
+      <td><span class="pill warn">Stub</span> (nur Metadaten)</td>
+    </tr>
+    <tr>
+      <td>PDF</td>
+      <td><code>application/pdf</code></td>
+      <td>— noch nicht implementiert</td>
+      <td><span class="pill warn">Stub</span></td>
+    </tr>
+    <tr>
+      <td>Bilder / Video / Audio</td>
+      <td><code>image/*</code>, <code>video/*</code>, <code>audio/*</code></td>
+      <td>—</td>
+      <td><span class="pill warn">Stub</span> (kein OCR/Transkript)</td>
+    </tr>
+    <tr>
+      <td>Ordner</td>
+      <td><code>vnd.google-apps.folder</code></td>
+      <td>— werden im Connector gefiltert</td>
+      <td><span class="pill muted">ignored</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+  <p><strong>OOXML-Extraktion (docx/xlsx/pptx):</strong> JSZip wird per
+  <code>import("https://esm.sh/jszip@3.10.1")</code> lazy geladen. Das Script strippt
+  XML-Tags, behandelt Entities (<code>&amp;amp;</code>, <code>&amp;lt;</code> …) und
+  komprimiert Whitespace. Siehe Funktionen <code>extractOoxmlText()</code> und
+  <code>stripXml()</code> in <code>google-drive.ts</code>.</p>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="pipeline">5 · Pipeline raw_events → normalize → embed</h2>
+
+<div class="flow">
+  <div class="step">
+    <div class="num">A</div>
+    <div class="title">connector-gdrive schreibt raw_events</div>
+    <div class="meta"><code class="path">supabase/functions/connector-gdrive/index.ts</code></div>
+    <div class="body">
+      Für jede gefundene Datei: Download-Text (sofern unterstützt), Payload sanitizen
+      (Null-Bytes stripen, weil Postgres JSONB sie ablehnt), einmal in <code>raw_events</code>
+      inserten (idempotent per <code>payload_hash</code>), dann Message in
+      <code>pgmq.q_normalize</code>.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">B</div>
+    <div class="title">worker-normalize → upsert_connector_source</div>
+    <div class="meta"><code class="path">supabase/functions/worker-normalize/index.ts</code></div>
+    <div class="body">
+      Liest Payload aus <code>raw_events</code>, ruft PG-Function
+      <code>upsert_connector_source(...)</code>:
+      <ul>
+        <li>Neue Source → Insert mit <code>sync_status='queued'</code>.</li>
+        <li>Bestehende Source, Etag geändert → Update + chunks invalidieren + enqueue embed.</li>
+        <li>Bestehende Source, Etag gleich, <strong>aber</strong> <code>sync_status</code> war
+        <code>queued</code>/<code>failed</code>/<code>error</code> → Force-Retry:
+        chunks invalidieren + enqueue embed.</li>
+        <li>Bestehende Source mit <code>deleted_at</code> → wird immer aus dem Papierkorb geholt.</li>
+      </ul>
+      Bei <code>was_changed = true</code> enqueued der Worker eine Message in
+      <code>pgmq.q_embed</code> mit Titel, extrahiertem Text und <code>source_id</code>.
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="num">C</div>
+    <div class="title">worker-embed → OpenAI + content_chunks</div>
+    <div class="meta"><code class="path">supabase/functions/worker-embed/index.ts</code></div>
+    <div class="body">
+      Chunkt den Text (Ziel ~400 Tokens, 50 Overlap), ruft sequentiell
+      <code>embedText()</code> (OpenAI <code>text-embedding-3-small</code>),
+      schreibt <code>content_chunks</code> (alte soft-deleted).
+      <strong>Erst nach erfolgreichem Schreiben</strong> flippt
+      <code>sources.status = 'ready'</code> und <code>sync_status = 'success'</code>.
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="status">6 · Status-Modell</h2>
+
+<p>Eine Source hat zwei Status-Spalten, die zusammen das UI-Verhalten steuern:</p>
+
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0"><code>sources.status</code></h3>
+    <p class="small">Wird in der <strong>/sources</strong>-Liste („Dateien") angezeigt.</p>
+    <ul>
+      <li><code>ready</code> — fertig, in RAG verfügbar</li>
+      <li><code>processing</code> / <code>pending</code> — in Arbeit</li>
+      <li><code>error</code> — fehlgeschlagen</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0"><code>sources.sync_status</code></h3>
+    <p class="small">Wird in der <strong>/quellen</strong>-Seite (Connector-Übersicht) angezeigt.</p>
+    <ul>
+      <li><code>success</code> → UI-Label „indexiert"</li>
+      <li><code>queued</code> → „wartet"</li>
+      <li><code>processing</code> → „verarbeitet"</li>
+      <li><code>error</code> / <code>failed</code> → „Fehler"</li>
+      <li><code>idle</code> — Default</li>
+    </ul>
+  </div>
+</div>
+
+<div class="card warn">
+  <strong>Wichtig:</strong> Beide Felder werden vom <code>worker-embed</code> <em>gemeinsam</em>
+  auf <code>ready</code> / <code>success</code> gesetzt — aber erst nachdem die Embeddings
+  tatsächlich in <code>content_chunks</code> liegen. Wenn du in /quellen „indexiert" siehst,
+  existieren die Embeddings garantiert.
+</div>
+
+<!-- =========================================================== -->
+<h2 id="errors">7 · Fehler & Retry</h2>
+
+<table>
+  <thead><tr><th>Stelle</th><th>Verhalten</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>connector-gdrive bei Drive-API-Fehler</td>
+      <td>Wirft Exception → runSync setzt Run auf <code>failed</code>,
+      schreibt in <code>job_failures</code>.</td>
+    </tr>
+    <tr>
+      <td>connector-gdrive bei Download-Fehler einer Einzeldatei</td>
+      <td><code>console.warn</code>, Datei wird trotzdem als Stub ingested (Text = null).</td>
+    </tr>
+    <tr>
+      <td>raw_events Insert (z. B. Null-Byte in Payload)</td>
+      <td>Eintrag in <code>job_failures</code>, andere Files laufen normal durch.
+      Payload wird bereits im Connector gesanitized.</td>
+    </tr>
+    <tr>
+      <td>worker-normalize Exception</td>
+      <td>Kein ACK, visibility_timeout (60s) läuft ab, Message wird erneut gelesen.
+      Nach 5 Versuchen → dead-letter in <code>job_failures</code>.</td>
+    </tr>
+    <tr>
+      <td>worker-embed / OpenAI-Fehler</td>
+      <td><code>embedText()</code> wirft mit echtem Status + Body → Retry via
+      visibility_timeout. Nach 5 Versuchen: <code>sources.sync_status = 'error'</code>
+      + dead-letter.</td>
+    </tr>
+    <tr>
+      <td>OpenAI-Key fehlt</td>
+      <td>Wird als explizite Exception erkannt und landet in <code>job_failures.error_message</code>.
+      Secret muss in Supabase Edge Function Secrets gesetzt sein
+      (<code>OPENAI_RESEARCH_TIMEKEEPER_KEY</code> oder <code>OPENAI_API_KEY</code>).</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- =========================================================== -->
+<h2 id="manual">8 · Manuelle Aktionen in der UI</h2>
+
+<table>
+  <thead>
+    <tr><th>Button / Aktion</th><th>Server-Action</th><th>Effekt</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>„Jetzt synchronisieren"</td>
+      <td><code>triggerInitialSync('google_drive')</code></td>
+      <td>POST <code>connector-gdrive</code> mit <code>action: initial-sync</code>.
+      Löscht <code>config.page_token</code> nicht — aber das Backend nutzt bei
+      <code>mode=initial</code> sowieso einen frischen Tree-Walk.</td>
+    </tr>
+    <tr>
+      <td>„Aufräumen"</td>
+      <td><code>reconcileConnector('google_drive')</code></td>
+      <td>Zuerst POST initial-sync, dann POST reconcile. Sequentiell.
+      Zieht neue Dateien + entfernt verwaiste.</td>
+    </tr>
+    <tr>
+      <td>„Erneut verarbeiten" (pro Zeile)</td>
+      <td><code>retrySource(sourceId)</code></td>
+      <td>Setzt <code>sync_status='queued'</code>, nimmt das letzte raw_event und enqueued
+      eine neue normalize-Message. Der Force-Retry-Branch in <code>upsert_connector_source</code>
+      sorgt dafür, dass auch bei unverändertem Etag re-embedded wird.</td>
+    </tr>
+    <tr>
+      <td>„Löschen" (pro Zeile)</td>
+      <td><code>deleteSource(id)</code></td>
+      <td>Soft-Delete via <code>soft_delete_source(id)</code>, verschwindet aus /sources und /quellen.</td>
+    </tr>
+    <tr>
+      <td>„Wiederherstellen" (im /papierkorb)</td>
+      <td><code>restoreSource(id)</code></td>
+      <td>Clear <code>deleted_at</code>, setzt <code>sync_status='queued'</code>. Nächster Sync re-embedded.</td>
+    </tr>
+    <tr>
+      <td>„Endgültig löschen" (im /papierkorb)</td>
+      <td><code>purgeSource(id)</code></td>
+      <td>Hard-Delete der Source + <code>content_chunks</code>. Point of no return.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- =========================================================== -->
+<h2 id="files">9 · Wichtige Code-Dateien</h2>
+
+<div class="card">
+  <h3 style="margin-top:0">Frontend (Next.js)</h3>
+  <dl class="kv">
+    <dt>/quellen Seite</dt><dd><code>apps/web/src/app/quellen/page.tsx</code></dd>
+    <dt>Server Actions</dt><dd><code>apps/web/src/app/quellen/actions.ts</code> — OAuth-Connect, triggerInitialSync, reconcileConnector, retrySource, deleteSource, restoreSource, purgeSource</dd>
+    <dt>/sources Seite</dt><dd><code>apps/web/src/app/sources/page.tsx</code> („Dateien"-Nav)</dd>
+    <dt>Sources Query</dt><dd><code>apps/web/src/lib/db/queries/sources.ts</code> — filtert <code>deleted_at IS NULL</code></dd>
+    <dt>Papierkorb</dt><dd><code>apps/web/src/app/papierkorb/page.tsx</code></dd>
+    <dt>OAuth-Callback</dt><dd><code>apps/web/src/app/auth/callback/gdrive/route.ts</code></dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Edge Functions (Deno)</h3>
+  <dl class="kv">
+    <dt>Drive-Connector</dt><dd><code>supabase/functions/connector-gdrive/index.ts</code> — syncOrg, reconcileOrg, Handler mit <code>action: initial-sync | delta-sync | reconcile</code></dd>
+    <dt>Drive-Helper</dt><dd><code>supabase/functions/_shared/google-drive.ts</code> — listDriveChanges, listAllFilesRecursive (Tree-Walk), listAllDriveFileIds, downloadDriveFileText, extractOoxmlText, stripXml</dd>
+    <dt>Normalize</dt><dd><code>supabase/functions/worker-normalize/index.ts</code> — normalizeDriveItem</dd>
+    <dt>Embed</dt><dd><code>supabase/functions/worker-embed/index.ts</code></dd>
+    <dt>Embeddings-Helper</dt><dd><code>supabase/functions/_shared/embeddings.ts</code> — embedText (wirft bei OpenAI-Fehler laut)</dd>
+    <dt>Queue-Helper</dt><dd><code>supabase/functions/_shared/queue.ts</code> — readBatch, ack, deadLetter, enqueue</dd>
+    <dt>RunSync-Wrapper</dt><dd><code>supabase/functions/_shared/worker.ts</code> — Lifecycle, raw_events insert, enqueue fan-out</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Datenbank (Supabase Migrations)</h3>
+  <dl class="kv">
+    <dt>Sources/Chunks Basis</dt><dd><code>supabase/migrations/20260406110000_sources_and_chunks.sql</code> (ungefähr)</dd>
+    <dt>Connector-Erweiterung</dt><dd><code>supabase/migrations/20260408120000_sources_connector_extensions.sql</code> — <code>connector_type</code>, <code>external_id</code>, <code>etag</code>, <code>sync_status</code>, <code>upsert_connector_source</code></dd>
+    <dt>Trash + Reconcile</dt><dd><code>supabase/migrations/20260409150000_source_trash_and_reconcile.sql</code> — <code>soft_delete_source</code>, <code>restore_source</code>, <code>purge_source</code>, <code>reconcile_drive_sources</code>, Reconcile-Cron</dd>
+    <dt>Upsert clear trash</dt><dd><code>supabase/migrations/20260409170000_upsert_clears_trash.sql</code></dd>
+    <dt>Force-Retry-Branch</dt><dd><code>supabase/migrations/20260409180000_upsert_force_retry.sql</code></dd>
+    <dt>Ambiguity-Fix</dt><dd><code>supabase/migrations/20260409190000_upsert_fix_ambiguous.sql</code></dd>
+  </dl>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="env">10 · Secrets & Env</h2>
+
+<table>
+  <thead><tr><th>Variable</th><th>Wo</th><th>Zweck</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>GOOGLE_CLIENT_ID</code></td>
+      <td>Vercel (Next.js)</td>
+      <td>OAuth-Connect-Flow auf <code>/quellen</code></td>
+    </tr>
+    <tr>
+      <td><code>GOOGLE_CLIENT_SECRET</code></td>
+      <td>Supabase Edge Function Secrets</td>
+      <td>Token-Refresh im <code>refreshGoogleAccessToken</code></td>
+    </tr>
+    <tr>
+      <td><code>OPENAI_RESEARCH_TIMEKEEPER_KEY</code> <em>oder</em> <code>OPENAI_API_KEY</code></td>
+      <td>Supabase Edge Function Secrets</td>
+      <td><code>worker-embed</code> ruft OpenAI damit auf</td>
+    </tr>
+    <tr>
+      <td><code>NEXT_PUBLIC_SUPABASE_URL</code></td>
+      <td>Vercel</td>
+      <td>Frontend → Supabase</td>
+    </tr>
+    <tr>
+      <td><code>SUPABASE_SERVICE_ROLE_KEY</code></td>
+      <td>Vercel Server + Vault <code>service_role_key</code></td>
+      <td>Server Actions rufen Edge Functions damit auf</td>
+    </tr>
+    <tr>
+      <td>Vault: <code>project_url</code>, <code>service_role_key</code></td>
+      <td>Supabase Vault</td>
+      <td><code>invoke_edge_function()</code> PG-Helper liest sie</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card warn">
+  <strong>Falle:</strong> Der OpenAI-Key muss in den <em>Edge Function Secrets</em>
+  gesetzt sein — nicht in <code>.env.local</code>. Die Edge-Function-Sandbox sieht
+  die Next.js-Envs nicht. Wenn Embeddings still bleiben → zuerst hier nachschauen.
+</div>
+
+<!-- =========================================================== -->
+<h2 id="troubleshooting">11 · Troubleshooting-Rezepte</h2>
+
+<div class="card">
+  <h3 style="margin-top:0">Eine Datei taucht nach Sync nicht in /sources auf</h3>
+  <ol>
+    <li>Ist sie in Drive sichtbar, wenn du als der verknüpfte User einloggst? Evtl. nur mit einzelnen Files geteilt, nicht in einem eigenen Ordner.</li>
+    <li>Check <code>raw_events</code>:<br><code>select * from raw_events where provider_id='google_drive' and payload-&gt;'file'-&gt;&gt;'name' ilike '%NAME%'</code></li>
+    <li>Wenn <strong>drin</strong>: check <code>sources</code> + <code>sync_status</code>. Falls <code>queued</code> → worker-normalize/embed klemmt.</li>
+    <li>Wenn <strong>nicht drin</strong>: check <code>job_failures</code> nach Unicode-Errors o. Ä.</li>
+    <li>Letzte Option: „Aufräumen" drücken — macht Full-Resync + Reconcile in einem.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Status bleibt ewig auf „wartet"</h3>
+  <ol>
+    <li>Queue-Länge prüfen:<br><code>select queue_name, queue_length from pgmq.metrics_all() where queue_name in ('normalize','embed');</code></li>
+    <li>Recent Worker-Logs: Supabase Dashboard → Edge Functions → worker-embed / worker-normalize.</li>
+    <li><code>select * from job_failures order by failed_at desc limit 10;</code> — zeigt den echten Fehler.</li>
+    <li>Typische Ursachen: OpenAI-Key fehlt, Rate-Limit, Netzwerkfehler zu Drive/OpenAI.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Dateien aus einem geteilten Ordner fehlen</h3>
+  <p>
+    Der rekursive Walk holt nur Ordner ein, die entweder dem User gehören oder
+    explizit mit ihm geteilt wurden (<code>sharedWithMe</code>). Wenn die Datei
+    in einem Ordner liegt, auf den nur ein Link-Share existiert, wird sie nicht
+    gefunden. Lösung: Ordner explizit mit dem verknüpften Account teilen.
+  </p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Suche / Telefonassistent findet nichts</h3>
+  <ol>
+    <li><code>select count(*) from content_chunks where embedding is not null;</code> — 0? Dann Embed-Pipeline steckt.</li>
+    <li>Pro Source:<br><code>select title, word_count, (select count(*) from content_chunks c where c.source_id=s.id and c.embedding is not null) as emb from sources s where connector_type='gdrive';</code></li>
+    <li>Wenn <code>word_count</code> klein (6-7) → Parser hat nichts extrahiert, nur Stub angelegt. Datei-Typ prüfen.</li>
+  </ol>
+</div>
+
+<hr>
+
+<p class="small">
+  Bei Änderungswünschen: Dieses Dokument zeigt, welche Datei zu welchem Bereich gehört.
+  Für einen guten Claude-Prompt: beschreib das <em>beobachtete Verhalten</em>, den
+  <em>erwarteten Zustand</em>, und nenn die Datei/Section aus dieser Doku als Kontext —
+  dann spart sich Claude das Raten.
+</p>
+
+</div>
+</body>
+</html>
