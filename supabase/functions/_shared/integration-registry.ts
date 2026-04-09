@@ -77,3 +77,33 @@ export async function getGoogleCredsForOrg(
   }
   return { clientId, clientSecret };
 }
+
+/**
+ * Resolve Microsoft (Entra ID / Graph) OAuth client credentials for an org.
+ * Falls back to platform env vars if the org runs in 'platform' mode.
+ */
+export async function getMicrosoftCredsForOrg(
+  orgId: string,
+): Promise<{ clientId: string; clientSecret: string; tenantId: string }> {
+  const integration = await getOrgIntegration(orgId, "sharepoint");
+
+  if (
+    integration?.credential_mode === "customer" &&
+    integration.credentials?.client_id &&
+    integration.credentials?.client_secret
+  ) {
+    return {
+      clientId: integration.credentials.client_id,
+      clientSecret: integration.credentials.client_secret,
+      tenantId: integration.credentials.tenant_id || "common",
+    };
+  }
+
+  const clientId = Deno.env.get("MICROSOFT_CLIENT_ID");
+  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET");
+  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID") || "common";
+  if (!clientId || !clientSecret) {
+    throw new Error("MICROSOFT_CLIENT_ID or MICROSOFT_CLIENT_SECRET not set");
+  }
+  return { clientId, clientSecret, tenantId };
+}

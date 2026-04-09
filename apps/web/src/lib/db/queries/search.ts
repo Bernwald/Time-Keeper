@@ -77,7 +77,8 @@ export async function boostedHybridSearch(
 // never imported as `sources` (e.g. CRM data added directly).
 export async function searchOperationalEntities(
   query: string,
-  limit = 8,
+  limit = 100,
+  mode: "search" | "exhaustive" = "search",
 ): Promise<ChunkSearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -87,12 +88,15 @@ export async function searchOperationalEntities(
   const like = `%${trimmed}%`;
 
   // For listing-questions ("alle Kontakte", "vertriebskontakte") we want to
-  // return everything, not just name-matches. Heuristic: if the query mentions
-  // "kontakt" / "firma" / "projekt", return the top rows by recency too.
+  // return everything, not just name-matches. In exhaustive mode (caller knows
+  // it's a listing) we return all rows of all three types.
   const lower = trimmed.toLowerCase();
-  const wantsAllContacts = /kontakt|vertrieb|ansprech|lead/i.test(lower);
-  const wantsAllCompanies = /firma|unternehmen|kunde|account/i.test(lower);
-  const wantsAllProjects = /projekt/i.test(lower);
+  const wantsAllContacts =
+    mode === "exhaustive" || /kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|hot|cold/i.test(lower);
+  const wantsAllCompanies =
+    mode === "exhaustive" || /firma|unternehmen|kunde|account/i.test(lower);
+  const wantsAllProjects =
+    mode === "exhaustive" || /projekt/i.test(lower);
 
   const [contactsRes, companiesRes, projectsRes] = await Promise.all([
     db
@@ -131,6 +135,35 @@ export async function searchOperationalEntities(
 
   const out: ChunkSearchResult[] = [];
 
+  // Bulk-fetch tags for all returned entities so the LLM sees temperature
+  // (warm/cold) and other categorical info that lives only in the tag system.
+  const contactIds = ((contactsRes.data ?? []) as any[]).map((c) => c.id);
+  const companyIds = ((companiesRes.data ?? []) as any[]).map((c) => c.id);
+  const projectIds = ((projectsRes.data ?? []) as any[]).map((p) => p.id);
+  const allEntityIds = [...contactIds, ...companyIds, ...projectIds];
+
+  const tagsByEntity = new Map<string, string[]>();
+  if (allEntityIds.length > 0) {
+    const { data: tagRows } = await db
+      .from("entity_tags")
+      .select("entity_type, entity_id, tags(name)")
+      .eq("organization_id", orgId)
+      .in("entity_id", allEntityIds);
+    for (const row of (tagRows ?? []) as any[]) {
+      const key = `${row.entity_type}:${row.entity_id}`;
+      const name = row.tags?.name;
+      if (!name) continue;
+      const arr = tagsByEntity.get(key) ?? [];
+      arr.push(name);
+      tagsByEntity.set(key, arr);
+    }
+  }
+
+  const tagLine = (type: string, id: string): string | null => {
+    const tags = tagsByEntity.get(`${type}:${id}`);
+    return tags && tags.length > 0 ? `Tags: ${tags.join(", ")}` : null;
+  };
+
   for (const c of (contactsRes.data ?? []) as any[]) {
     const fullName = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
     const company = c.companies?.name ?? "";
@@ -141,6 +174,7 @@ export async function searchOperationalEntities(
       c.email && `E-Mail: ${c.email}`,
       c.phone && `Telefon: ${c.phone}`,
       c.status && `Status: ${c.status}`,
+      tagLine("contact", c.id),
       c.notes && `Notizen: ${c.notes}`,
     ].filter(Boolean).join("\n");
     out.push({
@@ -159,6 +193,7 @@ export async function searchOperationalEntities(
       `Unternehmen: ${c.name}`,
       c.website && `Website: ${c.website}`,
       c.status && `Status: ${c.status}`,
+      tagLine("company", c.id),
       c.notes && `Notizen: ${c.notes}`,
     ].filter(Boolean).join("\n");
     out.push({
@@ -178,6 +213,7 @@ export async function searchOperationalEntities(
       `Projekt: ${p.name}`,
       company && `Kunde: ${company}`,
       p.status && `Status: ${p.status}`,
+      tagLine("project", p.id),
       p.description && `Beschreibung: ${p.description}`,
     ].filter(Boolean).join("\n");
     out.push({

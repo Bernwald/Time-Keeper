@@ -181,6 +181,22 @@ export default function ImportPage() {
         </p>
       </div>
 
+      <div
+        className="rounded-[var(--radius-md)] border px-4 py-3 text-sm"
+        style={{
+          background: "var(--color-bg-elevated)",
+          borderColor: "var(--color-line)",
+          color: "var(--color-text)",
+        }}
+      >
+        <strong style={{ color: "var(--color-accent)" }}>Hinweis:</strong>{" "}
+        Dieser Import-Pfad wird abgeloest. Verbinde stattdessen{" "}
+        <Link href="/quellen" className="underline" style={{ color: "var(--color-accent)" }}>
+          SharePoint oder Drive
+        </Link>
+        {" "}— deine Daten bleiben dann automatisch aktuell.
+      </div>
+
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-xs" style={styles.muted}>
         {["Datei wählen", "Zuordnung", "Vorschau", "Import"].map((label, i) => {

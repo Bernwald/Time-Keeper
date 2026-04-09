@@ -33,7 +33,96 @@ type Normalizer = (
 
 const NORMALIZERS: Record<string, Normalizer> = {
   "google_calendar:calendar_event": normalizeGoogleCalendarEvent,
+  "sharepoint:drive_item":          normalizeDriveItem,
+  "google_drive:drive_item":        normalizeDriveItem,
 };
+
+// Connector drive items: upsert into the sources table via the
+// connector-aware RPC, then enqueue an embed job if content changed.
+async function normalizeDriveItem(
+  msg: NormalizeMsg,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const supabase = getServiceClient();
+
+  // SharePoint payloads carry the DriveItem fields directly; gdrive change
+  // payloads wrap them under `file`.
+  const file = (payload.file as Record<string, unknown> | undefined) ?? payload;
+  const isDeleted =
+    Boolean((payload as { removed?: boolean }).removed) ||
+    Boolean((payload as { deleted?: unknown }).deleted) ||
+    Boolean((file as { trashed?: boolean }).trashed);
+
+  const externalId = (file.id as string) ?? msg.external_id;
+  const title = (file.name as string) ?? `${msg.provider_id} ${externalId}`;
+  const etag =
+    (file.eTag as string) ??
+    (file.cTag as string) ??
+    (file.md5Checksum as string) ??
+    (file.modifiedTime as string) ??
+    (file.lastModifiedDateTime as string) ??
+    null;
+  const mimeType =
+    (file.mimeType as string) ??
+    ((file.file as Record<string, unknown> | undefined)?.mimeType as string | undefined) ??
+    null;
+  const sourceUrl =
+    (file.webUrl as string) ??
+    (file.webViewLink as string) ??
+    null;
+
+  if (isDeleted) {
+    // Soft-delete by external_id lookup
+    const { data: existing } = await supabase
+      .from("sources")
+      .select("id")
+      .eq("connector_type", msg.provider_id === "sharepoint" ? "sharepoint" : "gdrive")
+      .eq("external_id", externalId)
+      .eq("organization_id", msg.organization_id)
+      .maybeSingle<{ id: string }>();
+    if (existing?.id) {
+      await supabase.rpc("soft_delete_source", { p_source_id: existing.id });
+    }
+    return;
+  }
+
+  const connectorType = msg.provider_id === "sharepoint" ? "sharepoint" : "gdrive";
+  const { data: upsert, error } = await supabase.rpc("upsert_connector_source", {
+    p_org_id: msg.organization_id,
+    p_connector_type: connectorType,
+    p_external_id: externalId,
+    p_title: title,
+    p_etag: etag,
+    p_mime_type: mimeType,
+    p_source_url: sourceUrl,
+    p_metadata: { provider: msg.provider_id, run_id: msg.run_id },
+  });
+  if (error) throw error;
+
+  const upsertRow = (Array.isArray(upsert) ? upsert[0] : upsert) as
+    | { source_id: string; was_changed: boolean }
+    | null;
+  if (!upsertRow?.was_changed) return;
+
+  // Enqueue embed job. Use the pre-extracted text if the connector pulled it,
+  // otherwise fall back to a stub so the file at least appears in search.
+  const extractedText = (payload._extracted_text as string | null) ?? null;
+  const text =
+    extractedText && extractedText.trim().length > 0
+      ? extractedText
+      : `Datei: ${title}\nTyp: ${mimeType ?? "unbekannt"}\nQuelle: ${sourceUrl ?? "—"}`;
+
+  await enqueue("embed", {
+    organization_id: msg.organization_id,
+    provider_id: msg.provider_id,
+    entity_type: msg.entity_type,
+    external_id: externalId,
+    run_id: msg.run_id,
+    title,
+    text,
+    source_id: upsertRow.source_id,
+  });
+}
 
 async function normalizeGoogleCalendarEvent(
   msg: NormalizeMsg,

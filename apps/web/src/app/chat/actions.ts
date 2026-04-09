@@ -219,7 +219,7 @@ export async function sendMessage(
     boostIds.length > 0
       ? boostedHybridSearch(searchQuery, boostIds, RETRIEVAL_LIMIT)
       : hybridSearch(searchQuery, RETRIEVAL_LIMIT),
-    searchOperationalEntities(searchQuery, 20),
+    searchOperationalEntities(searchQuery, 100, listing.isListing ? "exhaustive" : "search"),
     listing.isListing
       ? listAllChunksByType(listing.types, LISTING_LIMIT)
       : Promise.resolve([] as ChunkSearchResult[]),
