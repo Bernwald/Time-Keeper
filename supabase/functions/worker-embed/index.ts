@@ -64,18 +64,27 @@ Deno.serve(async (req) => {
 
       // Strip trailing empty columns from Markdown tables. Older extractions
       // may carry dozens of empty "|  " columns that bloat each chunk.
+      // Strategy: find max non-empty column index across all data rows in
+      // each section, then trim header + separator + data rows to match.
       if (isTabular) {
-        text = text.split("\n").map((line) => {
-          if (!line.startsWith("|")) return line;
+        const lines = text.split("\n");
+        // First pass: find the max used column for each section.
+        let maxCol = 0;
+        for (const line of lines) {
+          if (!line.startsWith("|") || /^\|[\s\-|]+\|$/.test(line)) continue;
           const cells = line.split("|");
-          let last = 0;
-          for (let i = 1; i < cells.length; i++) {
-            if (cells[i].trim()) last = i;
+          for (let i = cells.length - 1; i >= 1; i--) {
+            if (cells[i].trim()) { if (i > maxCol) maxCol = i; break; }
           }
-          return last > 0
-            ? cells.slice(0, last + 1).join("|") + " |"
-            : line;
-        }).join("\n");
+        }
+        if (maxCol > 0) {
+          text = lines.map((line) => {
+            if (!line.startsWith("|")) return line;
+            const cells = line.split("|");
+            if (cells.length <= maxCol + 2) return line;
+            return cells.slice(0, maxCol + 1).join("|") + " |";
+          }).join("\n");
+        }
       }
       console.log("[worker-embed] chunking", { msg_id: m.msg_id, isTabular, textLen: text.length });
       let chunks;
