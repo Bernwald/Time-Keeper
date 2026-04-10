@@ -60,7 +60,9 @@ Deno.serve(async (req) => {
 
       // Detect tabular content (Markdown tables from xlsx extraction) and
       // use the structure-aware chunker so column headers repeat in every chunk.
-      const isTabular = /^## Sheet:/m.test(text) && text.includes("\n|");
+      const sheetMatch = text.match(/^## Sheet:\s*(.+)/m);
+      const msgSheetName = sheetMatch?.[1]?.trim() ?? null;
+      const isTabular = !!sheetMatch && text.includes("\n|");
 
       // Strip trailing empty columns from Markdown tables. Older extractions
       // may carry dozens of empty "|  " columns that bloat each chunk.
@@ -121,8 +123,8 @@ Deno.serve(async (req) => {
         // For multi-sheet xlsx each sheet arrives as a separate message —
         // don't overwrite raw_text with a single sheet's portion.
         const updatePayload: Record<string, unknown> = { title: msg.title };
-        if (!chunks[0]?.sheetName) {
-          // Non-tabular: single message per source, safe to set full text.
+        if (!msgSheetName) {
+          // Non-sheet content: single message per source, safe to set full text.
           updatePayload.raw_text = text;
           updatePayload.word_count = wordCount;
         }
@@ -197,13 +199,14 @@ Deno.serve(async (req) => {
       // 3. Replace existing chunks for this source. For multi-sheet xlsx
       //    each sheet arrives as a separate message — only delete chunks
       //    belonging to the same sheet, not the whole source.
-      const sheetName = chunks[0]?.sheetName;
+      //    msgSheetName is extracted from the "## Sheet:" header and covers
+      //    both tabular and non-tabular sheet sections.
       let delQuery = supabase
         .from("content_chunks")
         .delete()
         .eq("source_id", sourceId);
-      if (sheetName) {
-        delQuery = delQuery.eq("metadata->>sheet_name", sheetName);
+      if (msgSheetName) {
+        delQuery = delQuery.eq("metadata->>sheet_name", msgSheetName);
       }
       const { error: delErr } = await delQuery;
       if (delErr) throw delErr;
@@ -221,9 +224,11 @@ Deno.serve(async (req) => {
           provider_id: msg.provider_id,
           entity_type: msg.entity_type,
           external_id: msg.external_id,
+          // Always set sheet_name from the message header so all chunks
+          // (tabular and non-tabular) are identifiable per sheet.
+          ...(msgSheetName ? { sheet_name: msgSheetName } : {}),
           ...(c.sheetName ? {
             content_format: "tabular",
-            sheet_name:     c.sheetName,
             row_start:      c.rowStart,
             row_end:        c.rowEnd,
           } : {}),
