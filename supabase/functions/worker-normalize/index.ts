@@ -106,11 +106,19 @@ async function normalizeDriveItem(
 
   // Enqueue embed job. Use the pre-extracted text if the connector pulled it,
   // otherwise fall back to a stub so the file at least appears in search.
+  // Cap text before enqueuing — pgmq messages > ~250KB can crash the Edge
+  // Function worker before it even starts processing. The embed worker has
+  // its own MAX_SOURCE_CHARS (200k) but that comes too late if the message
+  // itself exceeds the function memory budget.
+  const MAX_ENQUEUE_CHARS = 200_000;
   const extractedText = (payload._extracted_text as string | null) ?? null;
-  const text =
+  const rawText =
     extractedText && extractedText.trim().length > 0
       ? extractedText
       : `Datei: ${title}\nTyp: ${mimeType ?? "unbekannt"}\nQuelle: ${sourceUrl ?? "—"}`;
+  const text = rawText.length > MAX_ENQUEUE_CHARS
+    ? rawText.slice(0, MAX_ENQUEUE_CHARS)
+    : rawText;
 
   await enqueue("embed", {
     organization_id: msg.organization_id,
