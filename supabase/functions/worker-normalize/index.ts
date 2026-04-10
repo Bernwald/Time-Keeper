@@ -110,7 +110,10 @@ async function normalizeDriveItem(
   // Function worker before it even starts processing. The embed worker has
   // its own MAX_SOURCE_CHARS (200k) but that comes too late if the message
   // itself exceeds the function memory budget.
-  const MAX_ENQUEUE_CHARS = 200_000;
+  // Edge Function memory + timeout limits cap what the embed worker can
+  // handle in one invocation. 50k chars ≈ 31 chunks ≈ 31 embed API calls,
+  // which comfortably fits within the ~60s execution window.
+  const MAX_ENQUEUE_CHARS = 50_000;
   const extractedText = (payload._extracted_text as string | null) ?? null;
   const rawText =
     extractedText && extractedText.trim().length > 0

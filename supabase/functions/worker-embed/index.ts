@@ -17,11 +17,12 @@ import { chunkText, chunkTabularText } from "../_shared/chunking.ts";
 
 const QUEUE                = "embed";
 const VISIBILITY_TIMEOUT   = 120;
-const BATCH_SIZE           = 10;
+const BATCH_SIZE           = 5;
 const MAX_ATTEMPTS_PER_MSG = 5;
-// Hard cap on total characters per source before chunking. Generous, but
-// prevents a runaway 10MB payload from chewing through the OpenAI quota.
-const MAX_SOURCE_CHARS     = 200_000;
+// Hard cap on total characters per source before chunking. Must stay within
+// Edge Function memory + timeout limits: 50k chars ≈ 31 chunks ≈ 31 embed
+// API calls, comfortably within the ~60s execution window.
+const MAX_SOURCE_CHARS     = 50_000;
 
 interface EmbedMsg {
   organization_id: string;
