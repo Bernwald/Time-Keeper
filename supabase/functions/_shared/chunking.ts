@@ -259,8 +259,9 @@ export function chunkTabularText(
       });
 
       // Advance cursor with overlap.
+      const prev = rowCursor;
       rowCursor = end - overlapRows;
-      if (rowCursor <= (end - effectiveRows)) rowCursor = end; // prevent infinite loop
+      if (rowCursor <= prev) rowCursor = end; // prevent infinite loop
     }
   }
 

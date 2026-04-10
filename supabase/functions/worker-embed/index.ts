@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   for (const m of messages) {
     const msg = m.message;
     try {
-      const text = (msg.text ?? "").slice(0, MAX_SOURCE_CHARS).trim();
+      let text = (msg.text ?? "").slice(0, MAX_SOURCE_CHARS).trim();
       if (!text) {
         await ack(QUEUE, m.msg_id);
         continue;
@@ -61,9 +61,33 @@ Deno.serve(async (req) => {
       // Detect tabular content (Markdown tables from xlsx extraction) and
       // use the structure-aware chunker so column headers repeat in every chunk.
       const isTabular = /^## Sheet:/m.test(text) && text.includes("\n|");
-      const chunks = isTabular
-        ? chunkTabularText(text, { targetTokens: 400 })
-        : chunkText(text, { targetTokens: 400, overlapTokens: 50 });
+
+      // Strip trailing empty columns from Markdown tables. Older extractions
+      // may carry dozens of empty "|  " columns that bloat each chunk.
+      if (isTabular) {
+        text = text.split("\n").map((line) => {
+          if (!line.startsWith("|")) return line;
+          const cells = line.split("|");
+          let last = 0;
+          for (let i = 1; i < cells.length; i++) {
+            if (cells[i].trim()) last = i;
+          }
+          return last > 0
+            ? cells.slice(0, last + 1).join("|") + " |"
+            : line;
+        }).join("\n");
+      }
+      console.log("[worker-embed] chunking", { msg_id: m.msg_id, isTabular, textLen: text.length });
+      let chunks;
+      try {
+        chunks = isTabular
+          ? chunkTabularText(text, { targetTokens: 400 })
+          : chunkText(text, { targetTokens: 400, overlapTokens: 50 });
+      } catch (chunkErr) {
+        console.error("[worker-embed] chunking FAILED", { msg_id: m.msg_id, error: chunkErr instanceof Error ? chunkErr.message : String(chunkErr), stack: chunkErr instanceof Error ? chunkErr.stack : undefined });
+        throw chunkErr;
+      }
+      console.log("[worker-embed] chunks created", { msg_id: m.msg_id, count: chunks.length });
       if (chunks.length === 0) {
         await ack(QUEUE, m.msg_id);
         continue;
