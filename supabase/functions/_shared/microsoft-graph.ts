@@ -4,8 +4,15 @@
 // refresh token, expose helpers for delta sync + file download + writeback.
 
 import { getMicrosoftCredsForOrg } from "./integration-registry.ts";
+import { extractOoxmlText } from "./google-drive.ts";
 
 const GRAPH_API = "https://graph.microsoft.com/v1.0";
+
+const OOXML_MIMES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
 
 function tokenUrl(tenantId: string): string {
   return `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
@@ -97,17 +104,32 @@ export async function listDriveItemsDelta(
 }
 
 /**
- * Download raw file content for a drive item. Returns null on non-text MIME
- * types we cannot extract here (PDF/DOCX/XLSX) — caller should handle.
+ * Download file content for a drive item. Handles text-like files directly
+ * and Office OOXML files (docx/xlsx/pptx) via shared extractOoxmlText helper.
  */
 export async function downloadDriveItemText(
   accessToken: string,
   itemId: string,
   mimeType?: string,
 ): Promise<string | null> {
-  // Only attempt extraction for text-like MIME types in v1. Binary office
-  // formats need a downstream extractor (PDF.js / mammoth / xlsx) which we
-  // do not run inside the edge function.
+  // OOXML office files — download bytes and extract via shared helper.
+  if (mimeType && OOXML_MIMES.has(mimeType)) {
+    const res = await fetch(`${GRAPH_API}/me/drive/items/${itemId}/content`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      console.error("[graph] downloadDriveItem:", res.status);
+      return null;
+    }
+    try {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      return await extractOoxmlText(bytes, mimeType);
+    } catch (err) {
+      console.warn("[graph] ooxml extract failed:", itemId, err);
+      return null;
+    }
+  }
+
   const isText =
     !mimeType ||
     mimeType.startsWith("text/") ||

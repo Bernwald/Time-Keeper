@@ -13,7 +13,7 @@
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
 import { readBatch, ack, deadLetter } from "../_shared/queue.ts";
 import { embedText } from "../_shared/embeddings.ts";
-import { chunkText } from "../_shared/chunking.ts";
+import { chunkText, chunkTabularText } from "../_shared/chunking.ts";
 
 const QUEUE                = "embed";
 const VISIBILITY_TIMEOUT   = 120;
@@ -57,8 +57,12 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Chunk up front so we know the chunk count before touching the DB.
-      const chunks = chunkText(text, { targetTokens: 400, overlapTokens: 50 });
+      // Detect tabular content (Markdown tables from xlsx extraction) and
+      // use the structure-aware chunker so column headers repeat in every chunk.
+      const isTabular = /^## Sheet:/m.test(text) && text.includes("\n|");
+      const chunks = isTabular
+        ? chunkTabularText(text, { targetTokens: 400 })
+        : chunkText(text, { targetTokens: 400, overlapTokens: 50 });
       if (chunks.length === 0) {
         await ack(QUEUE, m.msg_id);
         continue;
@@ -172,6 +176,12 @@ Deno.serve(async (req) => {
           provider_id: msg.provider_id,
           entity_type: msg.entity_type,
           external_id: msg.external_id,
+          ...(c.sheetName ? {
+            content_format: "tabular",
+            sheet_name:     c.sheetName,
+            row_start:      c.rowStart,
+            row_end:        c.rowEnd,
+          } : {}),
         },
       }));
 

@@ -211,7 +211,227 @@ function stripXml(xml: string): string {
     .trim();
 }
 
-async function extractOoxmlText(
+// ---------------------------------------------------------------------------
+// Structured xlsx extraction — preserves column/row relationships as Markdown
+// tables so the RAG layer can answer specific data questions.
+// ---------------------------------------------------------------------------
+
+// Decode XML entities in cell values.
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+// Convert column letter(s) to zero-based index: A→0, B→1, Z→25, AA→26 etc.
+function colLetterToIndex(letters: string): number {
+  let idx = 0;
+  for (let i = 0; i < letters.length; i++) {
+    idx = idx * 26 + (letters.charCodeAt(i) - 64); // A=65
+  }
+  return idx - 1;
+}
+
+// Parse the shared-strings table into an indexed array.
+function parseSharedStrings(xml: string): string[] {
+  const strings: string[] = [];
+  // Match each <si> block and extract all <t> text inside it.
+  const siBlocks = xml.match(/<si[^>]*>[\s\S]*?<\/si>/gi) ?? [];
+  for (const block of siBlocks) {
+    const tMatches = block.match(/<t[^>]*>([\s\S]*?)<\/t>/gi) ?? [];
+    const combined = tMatches
+      .map((t) => {
+        const inner = t.replace(/<t[^>]*>/i, "").replace(/<\/t>/i, "");
+        return decodeXmlEntities(inner);
+      })
+      .join("");
+    strings.push(combined);
+  }
+  return strings;
+}
+
+// Parse sheet names from workbook.xml. Returns ordered array.
+function parseSheetNames(xml: string): string[] {
+  const names: string[] = [];
+  const re = /<sheet\s[^>]*name="([^"]*)"[^>]*\/?>(?:<\/sheet>)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    names.push(decodeXmlEntities(m[1]));
+  }
+  return names;
+}
+
+// Parse a single sheet XML into a 2D string grid.
+function parseSheetGrid(
+  xml: string,
+  sharedStrings: string[],
+): string[][] {
+  const rows: Array<{ rowIdx: number; cells: Array<{ col: number; value: string }> }> = [];
+
+  // Match each <row> block.
+  const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/gi;
+  let rowMatch: RegExpExecArray | null;
+  while ((rowMatch = rowRe.exec(xml)) !== null) {
+    const rowContent = rowMatch[1];
+    const cells: Array<{ col: number; value: string }> = [];
+
+    // Match each <c> cell.
+    const cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/gi;
+    let cellMatch: RegExpExecArray | null;
+    while ((cellMatch = cellRe.exec(rowContent)) !== null) {
+      const attrs = cellMatch[1];
+      const inner = cellMatch[2] ?? "";
+
+      // Cell reference (e.g. "B3") → extract column letters.
+      const refMatch = attrs.match(/r="([A-Z]+)\d+"/i);
+      if (!refMatch) continue;
+      const colIdx = colLetterToIndex(refMatch[1].toUpperCase());
+
+      // Cell type: t="s" = shared string, t="inlineStr" = inline, else number/raw.
+      const typeMatch = attrs.match(/t="([^"]*)"/i);
+      const cellType = typeMatch?.[1] ?? "";
+
+      let value = "";
+      if (cellType === "s") {
+        // Shared string reference — <v> contains the index.
+        const vMatch = inner.match(/<v>([\s\S]*?)<\/v>/i);
+        const idx = vMatch ? parseInt(vMatch[1], 10) : -1;
+        value = idx >= 0 && idx < sharedStrings.length ? sharedStrings[idx] : "";
+      } else if (cellType === "inlineStr") {
+        // Inline string — text lives inside <is><t>...</t></is>.
+        const tMatch = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/i);
+        value = tMatch ? decodeXmlEntities(tMatch[1]) : "";
+      } else {
+        // Number, boolean, or other — take raw <v> content.
+        const vMatch = inner.match(/<v>([\s\S]*?)<\/v>/i);
+        value = vMatch ? decodeXmlEntities(vMatch[1]) : "";
+      }
+
+      cells.push({ col: colIdx, value: value.trim() });
+    }
+
+    if (cells.length > 0) {
+      // Determine row index from the first cell reference.
+      const rowNumMatch = rowMatch[0].match(/<row\b[^>]*r="(\d+)"/i);
+      const rowIdx = rowNumMatch ? parseInt(rowNumMatch[1], 10) - 1 : rows.length;
+      rows.push({ rowIdx, cells });
+    }
+  }
+
+  if (rows.length === 0) return [];
+
+  // Determine grid dimensions.
+  let maxCol = 0;
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.col > maxCol) maxCol = cell.col;
+    }
+  }
+
+  // Build the 2D grid.
+  const grid: string[][] = [];
+  for (const row of rows) {
+    const rowArr = new Array<string>(maxCol + 1).fill("");
+    for (const cell of row.cells) {
+      rowArr[cell.col] = cell.value;
+    }
+    grid.push(rowArr);
+  }
+
+  return grid;
+}
+
+// Escape pipe characters inside cell values for Markdown tables.
+function escPipe(s: string): string {
+  return s.replace(/\|/g, "\\|");
+}
+
+// Format a 2D grid as a Markdown table. For very wide tables (single row
+// exceeds ~300 tokens ≈ 1200 chars), switch to a vertical key-value format.
+function gridToMarkdown(grid: string[][], sheetName: string): string {
+  if (grid.length === 0) return "";
+
+  const headers = grid[0];
+  const dataRows = grid.slice(1);
+
+  // Estimate width of one row in characters.
+  const sampleRow = headers.join(" | ");
+  const isWide = sampleRow.length > 1200;
+
+  const lines: string[] = [`## Sheet: ${sheetName}`];
+
+  if (isWide) {
+    // Vertical format for wide tables: one "record" block per row.
+    for (let r = 0; r < dataRows.length; r++) {
+      lines.push("");
+      lines.push(`### Zeile ${r + 2}`);
+      for (let c = 0; c < headers.length; c++) {
+        const val = dataRows[r]?.[c] ?? "";
+        if (val) lines.push(`${headers[c]}: ${val}`);
+      }
+    }
+  } else {
+    // Standard Markdown table.
+    lines.push("| " + headers.map(escPipe).join(" | ") + " |");
+    lines.push("| " + headers.map(() => "---").join(" | ") + " |");
+    for (const row of dataRows) {
+      // Skip completely empty rows.
+      if (row.every((c) => !c)) continue;
+      lines.push("| " + row.map(escPipe).join(" | ") + " |");
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// Main xlsx structured extractor. Accepts an already-opened JSZip instance.
+async function extractXlsxStructured(
+  zip: { file: (path: string | RegExp) => any },
+): Promise<string | null> {
+  // 1. Parse shared strings.
+  const sharedFile = zip.file("xl/sharedStrings.xml");
+  const sharedStrings = sharedFile
+    ? parseSharedStrings(await sharedFile.async("string"))
+    : [];
+
+  // 2. Parse sheet names from workbook.xml.
+  const wbFile = zip.file("xl/workbook.xml");
+  const sheetNames = wbFile
+    ? parseSheetNames(await wbFile.async("string"))
+    : [];
+
+  // 3. Parse each sheet and format as Markdown.
+  const sheetFiles = zip.file(/^xl\/worksheets\/sheet\d+\.xml$/) as Array<{
+    name: string;
+    async: (type: string) => Promise<string>;
+  }>;
+
+  // Sort sheet files by number to match workbook order.
+  sheetFiles.sort((a, b) => {
+    const numA = parseInt(a.name.match(/sheet(\d+)/)?.[1] ?? "0", 10);
+    const numB = parseInt(b.name.match(/sheet(\d+)/)?.[1] ?? "0", 10);
+    return numA - numB;
+  });
+
+  const sections: string[] = [];
+  for (let i = 0; i < sheetFiles.length; i++) {
+    const sheetXml = await sheetFiles[i].async("string");
+    const grid = parseSheetGrid(sheetXml, sharedStrings);
+    if (grid.length === 0) continue;
+
+    const name = sheetNames[i] ?? `Sheet${i + 1}`;
+    sections.push(gridToMarkdown(grid, name));
+  }
+
+  const result = sections.join("\n\n").trim();
+  return result.length > 0 ? result : null;
+}
+
+export async function extractOoxmlText(
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<string | null> {
@@ -232,15 +452,8 @@ async function extractOoxmlText(
     const doc = zip.file("word/document.xml");
     if (doc) textParts.push(stripXml(await doc.async("string")));
   } else if (mimeType === XLSX_MIME) {
-    // sharedStrings.xml holds every unique string in the workbook and
-    // contains the bulk of user-visible content. sheetN.xml has cell
-    // references + inline numbers.
-    const shared = zip.file("xl/sharedStrings.xml");
-    if (shared) textParts.push(stripXml(await shared.async("string")));
-    const sheetFiles = zip.file(/^xl\/worksheets\/sheet\d+\.xml$/);
-    for (const sheet of sheetFiles) {
-      textParts.push(stripXml(await sheet.async("string")));
-    }
+    const structured = await extractXlsxStructured(zip);
+    if (structured) textParts.push(structured);
   } else if (mimeType === PPTX_MIME) {
     const slideFiles = zip.file(/^ppt\/slides\/slide\d+\.xml$/);
     for (const slide of slideFiles) {

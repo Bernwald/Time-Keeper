@@ -17,6 +17,10 @@ export interface Chunk {
   charStart:  number;
   charEnd:    number;
   tokenCount: number;
+  // Optional tabular provenance (set by chunkTabularText).
+  sheetName?: string;
+  rowStart?:  number;
+  rowEnd?:    number;
 }
 
 export interface ChunkOptions {
@@ -149,4 +153,177 @@ function splitWithOffsets(
   const tail = text.slice(cursor);
   if (tail.trim()) out.push({ text: tail, start: baseOffset + cursor });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Tabular chunking — splits Markdown-table text (produced by the xlsx
+// extractor) into chunks that preserve column headers in every chunk.
+// ---------------------------------------------------------------------------
+
+export interface TabularChunkOptions {
+  /** Max data rows per chunk (default 25). */
+  rowsPerChunk?: number;
+  /** Overlap rows repeated at the start of the next chunk (default 2). */
+  overlapRows?: number;
+  /** Target tokens per chunk — used as a soft upper bound (default 400). */
+  targetTokens?: number;
+}
+
+interface SheetSection {
+  name: string;
+  headerLine: string;
+  separatorLine: string;
+  dataRows: string[];
+  /** Char offset of this section in the original input. */
+  startOffset: number;
+}
+
+/**
+ * Chunk Markdown-table content into self-contained pieces. Each chunk
+ * includes the sheet name + repeated column headers so it can be understood
+ * independently by an embedding model or LLM.
+ *
+ * Falls back to `chunkText()` for any section that doesn't look tabular.
+ */
+export function chunkTabularText(
+  input: string,
+  opts: TabularChunkOptions = {},
+): Chunk[] {
+  const rowsPerChunk = opts.rowsPerChunk ?? 25;
+  const overlapRows  = opts.overlapRows  ?? 2;
+  const targetTokens = opts.targetTokens ?? 400;
+  const targetChars  = targetTokens * CHARS_PER_TOKEN;
+
+  const text = (input ?? "").trim();
+  if (!text) return [];
+
+  // Split on "## Sheet:" markers while tracking char offsets.
+  const sections = splitSheetSections(text);
+
+  if (sections.length === 0) {
+    // No tabular markers found — fall back to generic chunking.
+    return chunkText(text, { targetTokens, overlapTokens: 50 });
+  }
+
+  const chunks: Chunk[] = [];
+
+  for (const section of sections) {
+    if (!section.headerLine || section.dataRows.length === 0) {
+      // Non-tabular section — use generic chunker.
+      const sectionText = buildSectionText(section);
+      const sub = chunkText(sectionText, { targetTokens, overlapTokens: 50 });
+      for (const c of sub) {
+        chunks.push({
+          ...c,
+          index:     chunks.length,
+          charStart: section.startOffset + c.charStart,
+          charEnd:   section.startOffset + c.charEnd,
+        });
+      }
+      continue;
+    }
+
+    // Adaptive rowsPerChunk: if a single header+row exceeds targetChars,
+    // reduce rows per chunk to fit.
+    const sampleRowLen = (section.headerLine + "\n" + section.separatorLine + "\n" + (section.dataRows[0] ?? "")).length;
+    const effectiveRows = sampleRowLen > targetChars
+      ? 1
+      : Math.min(rowsPerChunk, Math.max(1, Math.floor(targetChars / Math.max(1, (section.dataRows[0]?.length ?? 50) + 2))));
+
+    const totalRows = section.dataRows.length;
+    let rowCursor = 0;
+
+    while (rowCursor < totalRows) {
+      const end = Math.min(rowCursor + effectiveRows, totalRows);
+      const sliceRows = section.dataRows.slice(rowCursor, end);
+      const rowStart = rowCursor + 2; // +2 because row 1 is header in Excel
+      const rowEnd   = end + 1;       // inclusive, 1-based
+
+      const chunkLines = [
+        `Sheet: ${section.name} (Zeilen ${rowStart}-${rowEnd} von ${totalRows + 1})`,
+        section.headerLine,
+        section.separatorLine,
+        ...sliceRows,
+      ];
+      const chunkStr = chunkLines.join("\n");
+
+      chunks.push({
+        index:      chunks.length,
+        text:       chunkStr,
+        charStart:  section.startOffset,
+        charEnd:    section.startOffset + chunkStr.length,
+        tokenCount: estimateTokens(chunkStr),
+        sheetName:  section.name,
+        rowStart,
+        rowEnd,
+      });
+
+      // Advance cursor with overlap.
+      rowCursor = end - overlapRows;
+      if (rowCursor <= (end - effectiveRows)) rowCursor = end; // prevent infinite loop
+    }
+  }
+
+  return chunks;
+}
+
+// Parse the "## Sheet:" delimited input into sections.
+function splitSheetSections(text: string): SheetSection[] {
+  const sections: SheetSection[] = [];
+  // Split on "## Sheet:" keeping the delimiter.
+  const parts = text.split(/(?=^## Sheet:)/m);
+
+  let offset = 0;
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) { offset += part.length; continue; }
+
+    const lines = trimmed.split("\n");
+    const titleLine = lines[0] ?? "";
+    const nameMatch = titleLine.match(/^## Sheet:\s*(.+)/);
+    const name = nameMatch?.[1]?.trim() ?? "Unknown";
+
+    // Find the Markdown table header (first line starting with |) and separator.
+    let headerLine = "";
+    let separatorLine = "";
+    const dataRows: string[] = [];
+    let foundHeader = false;
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!foundHeader && line.startsWith("|")) {
+        headerLine = line;
+        // Next line should be the separator (| --- | --- |).
+        if (i + 1 < lines.length && /^\|[\s-|]+\|$/.test(lines[i + 1])) {
+          separatorLine = lines[i + 1];
+          i++; // skip separator
+        }
+        foundHeader = true;
+        continue;
+      }
+      if (foundHeader && line.startsWith("|")) {
+        dataRows.push(line);
+      }
+    }
+
+    sections.push({
+      name,
+      headerLine,
+      separatorLine,
+      dataRows,
+      startOffset: offset,
+    });
+
+    offset += part.length;
+  }
+
+  return sections;
+}
+
+function buildSectionText(section: SheetSection): string {
+  const lines = [`## Sheet: ${section.name}`];
+  if (section.headerLine) lines.push(section.headerLine);
+  if (section.separatorLine) lines.push(section.separatorLine);
+  lines.push(...section.dataRows);
+  return lines.join("\n");
 }
