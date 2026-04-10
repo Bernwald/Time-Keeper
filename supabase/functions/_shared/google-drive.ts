@@ -342,6 +342,24 @@ function parseSheetGrid(
     grid.push(rowArr);
   }
 
+  // Trim trailing empty columns — Excel files often have sparse columns
+  // far to the right that bloat the output (e.g. 9 real cols + 60 empty).
+  if (grid.length > 0) {
+    let lastUsedCol = 0;
+    for (const row of grid) {
+      for (let c = row.length - 1; c >= 0; c--) {
+        if (row[c].trim()) {
+          if (c > lastUsedCol) lastUsedCol = c;
+          break;
+        }
+      }
+    }
+    // Keep up to lastUsedCol (inclusive).
+    for (let r = 0; r < grid.length; r++) {
+      grid[r] = grid[r].slice(0, lastUsedCol + 1);
+    }
+  }
+
   return grid;
 }
 
