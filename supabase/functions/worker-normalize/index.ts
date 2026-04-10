@@ -104,35 +104,38 @@ async function normalizeDriveItem(
     | null;
   if (!upsertRow?.was_changed) return;
 
-  // Enqueue embed job. Use the pre-extracted text if the connector pulled it,
-  // otherwise fall back to a stub so the file at least appears in search.
-  // Cap text before enqueuing — pgmq messages > ~250KB can crash the Edge
-  // Function worker before it even starts processing. The embed worker has
-  // its own MAX_SOURCE_CHARS (200k) but that comes too late if the message
-  // itself exceeds the function memory budget.
-  // Edge Function memory + timeout limits cap what the embed worker can
-  // handle in one invocation. 50k chars ≈ 31 chunks ≈ 31 embed API calls,
-  // which comfortably fits within the ~60s execution window.
+  // Enqueue embed job(s). For multi-sheet xlsx the extracted text can be
+  // 100s of KB. We split on "## Sheet:" markers and enqueue one message per
+  // section so every sheet gets embedded independently within Edge Function
+  // memory/timeout limits. Non-tabular content is sent as a single message.
   const MAX_ENQUEUE_CHARS = 50_000;
   const extractedText = (payload._extracted_text as string | null) ?? null;
   const rawText =
     extractedText && extractedText.trim().length > 0
       ? extractedText
       : `Datei: ${title}\nTyp: ${mimeType ?? "unbekannt"}\nQuelle: ${sourceUrl ?? "—"}`;
-  const text = rawText.length > MAX_ENQUEUE_CHARS
-    ? rawText.slice(0, MAX_ENQUEUE_CHARS)
-    : rawText;
 
-  await enqueue("embed", {
-    organization_id: msg.organization_id,
-    provider_id: msg.provider_id,
-    entity_type: msg.entity_type,
-    external_id: externalId,
-    run_id: msg.run_id,
-    title,
-    text,
-    source_id: upsertRow.source_id,
-  });
+  // Split tabular content into per-sheet sections.
+  const sections = rawText.startsWith("## Sheet:")
+    ? rawText.split(/(?=^## Sheet:)/m).filter((s) => s.trim())
+    : [rawText];
+
+  for (const section of sections) {
+    const text = section.length > MAX_ENQUEUE_CHARS
+      ? section.slice(0, MAX_ENQUEUE_CHARS)
+      : section;
+
+    await enqueue("embed", {
+      organization_id: msg.organization_id,
+      provider_id: msg.provider_id,
+      entity_type: msg.entity_type,
+      external_id: externalId,
+      run_id: msg.run_id,
+      title,
+      text,
+      source_id: upsertRow.source_id,
+    });
+  }
 }
 
 async function normalizeGoogleCalendarEvent(

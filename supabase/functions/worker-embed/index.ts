@@ -116,15 +116,19 @@ Deno.serve(async (req) => {
 
       if (msg.source_id) {
         sourceId = msg.source_id;
-        // Only stage title/text/word_count here. status/sync_status flip to
+        // Only stage title/word_count here. status/sync_status flip to
         // 'ready'/'success' happens below, after embeddings actually succeeded.
+        // For multi-sheet xlsx each sheet arrives as a separate message —
+        // don't overwrite raw_text with a single sheet's portion.
+        const updatePayload: Record<string, unknown> = { title: msg.title };
+        if (!chunks[0]?.sheetName) {
+          // Non-tabular: single message per source, safe to set full text.
+          updatePayload.raw_text = text;
+          updatePayload.word_count = wordCount;
+        }
         const { error: updErr } = await supabase
           .from("sources")
-          .update({
-            title:      msg.title,
-            raw_text:   text,
-            word_count: wordCount,
-          })
+          .update(updatePayload)
           .eq("id", sourceId)
           .eq("organization_id", msg.organization_id);
         if (updErr) throw updErr;
@@ -190,11 +194,18 @@ Deno.serve(async (req) => {
         embeddings.push(await embedText(c.text) as number[]);
       }
 
-      // 3. Replace existing chunks for this source.
-      const { error: delErr } = await supabase
+      // 3. Replace existing chunks for this source. For multi-sheet xlsx
+      //    each sheet arrives as a separate message — only delete chunks
+      //    belonging to the same sheet, not the whole source.
+      const sheetName = chunks[0]?.sheetName;
+      let delQuery = supabase
         .from("content_chunks")
         .delete()
         .eq("source_id", sourceId);
+      if (sheetName) {
+        delQuery = delQuery.eq("metadata->>sheet_name", sheetName);
+      }
+      const { error: delErr } = await delQuery;
       if (delErr) throw delErr;
 
       const rows = chunks.map((c, i) => ({
