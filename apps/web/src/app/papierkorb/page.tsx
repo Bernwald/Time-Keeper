@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createServiceClient, getUser } from "@/lib/db/supabase-server";
+import { createUserClient, getUser } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
 import { card, page, styles } from "@/components/ui/table-classes";
 import { RestoreButton, PurgeButton } from "@/app/quellen/retry-button";
@@ -26,9 +26,9 @@ export default async function PapierkorbPage() {
   if (!user) redirect("/login");
   const orgId = await requireOrgId();
 
-  // RLS hides deleted_at IS NOT NULL rows from authenticated reads, so we
-  // call the SECURITY DEFINER RPC via the service client.
-  const db = createServiceClient();
+  // list_deleted_sources is SECURITY DEFINER (bypasses RLS on its own),
+  // so the authenticated user client is sufficient.
+  const db = await createUserClient();
   const { data, error } = await db.rpc("list_deleted_sources", { p_org_id: orgId });
   if (error) throw error;
   const items = (data ?? []) as DeletedSource[];
