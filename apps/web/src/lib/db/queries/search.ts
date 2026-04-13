@@ -12,7 +12,7 @@ export type ChunkSearchResult = {
   rank: number;
 };
 
-export async function fullTextSearch(query: string, limit = 10): Promise<ChunkSearchResult[]> {
+export async function fullTextSearch(query: string, limit = 10, userId?: string): Promise<ChunkSearchResult[]> {
   if (!query.trim()) return [];
   const orgId = await requireOrgId();
   const db = await createUserClient();
@@ -20,18 +20,19 @@ export async function fullTextSearch(query: string, limit = 10): Promise<ChunkSe
     p_org_id: orgId,
     p_query: query,
     p_limit: limit,
+    p_user_id: userId ?? null,
   });
   if (error) throw error;
   return (data ?? []) as ChunkSearchResult[];
 }
 
-export async function hybridSearch(query: string, limit = 10): Promise<ChunkSearchResult[]> {
+export async function hybridSearch(query: string, limit = 10, userId?: string): Promise<ChunkSearchResult[]> {
   if (!query.trim()) return [];
 
   const embedding = await embedText(query);
 
   // Fall back to FTS if no embedding key available
-  if (!embedding) return fullTextSearch(query, limit);
+  if (!embedding) return fullTextSearch(query, limit, userId);
 
   const orgId = await requireOrgId();
   const db = await createUserClient();
@@ -40,6 +41,7 @@ export async function hybridSearch(query: string, limit = 10): Promise<ChunkSear
     p_query: query,
     p_embedding: JSON.stringify(embedding),
     p_limit: limit,
+    p_user_id: userId ?? null,
   });
   if (error) throw error;
   return (data ?? []) as ChunkSearchResult[];
@@ -49,13 +51,14 @@ export async function boostedHybridSearch(
   query: string,
   boostSourceIds: string[],
   limit = 10,
+  userId?: string,
 ): Promise<ChunkSearchResult[]> {
   if (!query.trim()) return [];
 
   const embedding = await embedText(query);
 
   // Fall back to FTS if no embedding key available
-  if (!embedding) return fullTextSearch(query, limit);
+  if (!embedding) return fullTextSearch(query, limit, userId);
 
   const orgId = await requireOrgId();
   const db = await createUserClient();
@@ -66,6 +69,7 @@ export async function boostedHybridSearch(
     p_boost_source_ids: boostSourceIds,
     p_boost_factor: 1.5,
     p_limit: limit,
+    p_user_id: userId ?? null,
   });
   if (error) throw error;
   return (data ?? []) as ChunkSearchResult[];
@@ -237,18 +241,39 @@ export async function searchOperationalEntities(
 export async function listAllChunksByType(
   sourceTypes: string[],
   limit = 80,
+  userId?: string,
 ): Promise<ChunkSearchResult[]> {
   if (sourceTypes.length === 0) return [];
   const orgId = await requireOrgId();
   const db = await createUserClient();
 
-  const { data } = await db
+  let query = db
     .from("sources")
-    .select("id, title, source_type, created_at, content_chunks(id, chunk_index, chunk_text)")
+    .select("id, title, source_type, folder_id, created_at, content_chunks(id, chunk_index, chunk_text)")
     .eq("organization_id", orgId)
     .in("source_type", sourceTypes)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  // Permission filtering: if userId provided, fetch accessible folder IDs
+  // and filter sources to those without folder or in accessible folders
+  if (userId) {
+    const { data: accessibleFolders } = await db
+      .from("source_folder_access")
+      .select("folder_id, permission_group_members!inner(user_id)")
+      .eq("permission_group_members.user_id", userId);
+
+    const folderIds = (accessibleFolders ?? []).map((f: any) => f.folder_id);
+
+    // Sources without folder_id are always visible; with folder_id only if accessible
+    if (folderIds.length > 0) {
+      query = query.or(`folder_id.is.null,folder_id.in.(${folderIds.join(",")})`);
+    } else {
+      query = query.is("folder_id", null);
+    }
+  }
+
+  const { data } = await query;
 
   const out: ChunkSearchResult[] = [];
   for (const s of (data ?? []) as any[]) {
@@ -272,19 +297,39 @@ export async function listAllChunksByType(
 export async function chunksBySourceIds(
   sourceIds: string[],
   limit = 20,
+  userId?: string,
 ): Promise<ChunkSearchResult[]> {
   if (sourceIds.length === 0) return [];
 
   const orgId = await requireOrgId();
   const db = await createUserClient();
-  const { data, error } = await db
+
+  let query = db
     .from("content_chunks")
-    .select("id, source_id, chunk_index, chunk_text, sources!inner(title, source_type)")
+    .select("id, source_id, chunk_index, chunk_text, sources!inner(title, source_type, folder_id)")
     .in("source_id", sourceIds)
     .eq("organization_id", orgId)
     .order("source_id")
     .order("chunk_index")
     .limit(limit);
+
+  // Permission filtering at source level
+  if (userId) {
+    const { data: accessibleFolders } = await db
+      .from("source_folder_access")
+      .select("folder_id, permission_group_members!inner(user_id)")
+      .eq("permission_group_members.user_id", userId);
+
+    const folderIds = (accessibleFolders ?? []).map((f: any) => f.folder_id);
+
+    if (folderIds.length > 0) {
+      query = query.or(`folder_id.is.null,folder_id.in.(${folderIds.join(",")})`, { referencedTable: "sources" });
+    } else {
+      query = query.is("sources.folder_id" as any, null);
+    }
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 

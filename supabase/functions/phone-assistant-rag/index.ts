@@ -284,12 +284,12 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        // Auto-boost sources linked to caller's contact
+        // Auto-boost sources linked to caller's contact + resolve permissions
         const callerNumber = payload.message.call?.customer?.number ?? "";
-        const boostSourceIds = await getCallerBoostSourceIds(
-          assistant.org_id,
-          callerNumber,
-        );
+        const [boostSourceIds, callerUserId] = await Promise.all([
+          getCallerBoostSourceIds(assistant.org_id, callerNumber),
+          getCallerUserId(assistant.org_id, callerNumber),
+        ]);
 
         const context = await searchKnowledge(
           assistant.org_id,
@@ -297,6 +297,7 @@ Deno.serve(async (req: Request) => {
           assistant.max_chunks ?? 5,
           assistant.boost_factor ?? 1.5,
           boostSourceIds,
+          callerUserId,
         );
 
         results.push({
@@ -335,12 +336,16 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        const callerNum = payload.message.call?.customer?.number ?? "";
+        const contactCallerUserId = await getCallerUserId(assistant.org_id, callerNum);
+
         const context = await searchKnowledgeForContact(
           assistant.org_id,
           contactName,
           query,
           assistant.max_chunks ?? 5,
           assistant.boost_factor ?? 1.5,
+          contactCallerUserId,
         );
 
         results.push({
@@ -446,10 +451,10 @@ Deno.serve(async (req: Request) => {
       }
 
       const callerNumber = payload.message.call?.customer?.number ?? "";
-      const boostSourceIds = await getCallerBoostSourceIds(
-        assistant.org_id,
-        callerNumber,
-      );
+      const [boostSourceIds, fnCallerUserId] = await Promise.all([
+        getCallerBoostSourceIds(assistant.org_id, callerNumber),
+        getCallerUserId(assistant.org_id, callerNumber),
+      ]);
 
       const context = await searchKnowledge(
         assistant.org_id,
@@ -457,6 +462,7 @@ Deno.serve(async (req: Request) => {
         assistant.max_chunks ?? 5,
         assistant.boost_factor ?? 1.5,
         boostSourceIds,
+        fnCallerUserId,
       );
 
       return jsonResponse({
@@ -472,12 +478,16 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ result: "Kein Kontaktname angegeben." });
       }
 
+      const fnCallerNum = payload.message.call?.customer?.number ?? "";
+      const fnContactUserId = await getCallerUserId(assistant.org_id, fnCallerNum);
+
       const context = await searchKnowledgeForContact(
         assistant.org_id,
         contactName,
         query,
         assistant.max_chunks ?? 5,
         assistant.boost_factor ?? 1.5,
+        fnContactUserId,
       );
 
       return jsonResponse({
@@ -587,6 +597,7 @@ async function searchKnowledge(
   maxChunks: number,
   boostFactor: number,
   boostSourceIds: string[] = [],
+  callerUserId: string | null = null,
 ): Promise<string> {
   const db = getServiceClient();
 
@@ -596,7 +607,7 @@ async function searchKnowledge(
   let chunks: Array<{ chunk_text: string; source_title: string }>;
 
   if (embedding) {
-    // Hybrid search (FTS + vector)
+    // Hybrid search (FTS + vector) with permission filter
     const { data, error } = await db.rpc("hybrid_search_boosted", {
       p_org_id: orgId,
       p_query: query,
@@ -604,6 +615,7 @@ async function searchKnowledge(
       p_boost_source_ids: boostSourceIds,
       p_boost_factor: boostFactor,
       p_limit: maxChunks,
+      p_user_id: callerUserId,
     });
 
     if (error) {
@@ -613,6 +625,7 @@ async function searchKnowledge(
         p_org_id: orgId,
         p_query: query,
         p_limit: maxChunks,
+        p_user_id: callerUserId,
       });
       chunks = ftsData ?? [];
     } else {
@@ -624,6 +637,7 @@ async function searchKnowledge(
       p_org_id: orgId,
       p_query: query,
       p_limit: maxChunks,
+      p_user_id: callerUserId,
     });
     if (error) {
       console.error("FTS error:", error);
@@ -649,6 +663,7 @@ async function searchKnowledgeForContact(
   query: string,
   maxChunks: number,
   boostFactor: number,
+  callerUserId: string | null = null,
 ): Promise<string> {
   const db = getServiceClient();
 
@@ -676,13 +691,14 @@ async function searchKnowledgeForContact(
     boostSourceIds = sourceIds ?? [];
   }
 
-  // Search with contact-boosted sources
+  // Search with contact-boosted sources + permission filter
   const searchResult = await searchKnowledge(
     orgId,
     query,
     maxChunks,
     boostFactor,
     boostSourceIds,
+    callerUserId,
   );
 
   // Prepend contact info if found
@@ -693,6 +709,28 @@ async function searchKnowledgeForContact(
     return contactInfo;
   }
   return searchResult;
+}
+
+/** Resolve the TimeKeeper user_id for a caller via phone number → contacts.user_id */
+async function getCallerUserId(
+  orgId: string,
+  callerNumber: string,
+): Promise<string | null> {
+  if (!callerNumber) return null;
+
+  const db = getServiceClient();
+  const normalized = callerNumber.replace(/\s+/g, "");
+
+  const { data } = await db
+    .from("contacts")
+    .select("user_id")
+    .eq("organization_id", orgId)
+    .eq("phone", normalized)
+    .not("user_id", "is", null)
+    .limit(1)
+    .maybeSingle();
+
+  return data?.user_id ?? null;
 }
 
 async function getCallerBoostSourceIds(

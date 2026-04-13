@@ -50,54 +50,19 @@ function IconChat({ size = 20 }: { size?: number }) {
   );
 }
 
-function IconCompany({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4" />
-      <path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01" />
-    </svg>
-  );
-}
-
-function IconContacts({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-    </svg>
-  );
-}
-
-function IconProjects({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
-    </svg>
-  );
-}
-
-function IconActivities({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
-function IconProcesses({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-    </svg>
-  );
-}
 
 function IconPhone({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+    </svg>
+  );
+}
+
+function IconShield({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
 }
@@ -145,16 +110,6 @@ const groups: NavGroup[] = [
       { href: "/chat", label: "Chat", icon: IconChat },
     ],
   },
-  {
-    label: "Operativ",
-    items: [
-      { href: "/companies", label: "Unternehmen", icon: IconCompany },
-      { href: "/contacts", label: "Kontakte", icon: IconContacts },
-      { href: "/projects", label: "Projekte", icon: IconProjects },
-      { href: "/activities", label: "Aktivitäten", icon: IconActivities },
-      { href: "/processes", label: "Prozesse", icon: IconProcesses },
-    ],
-  },
 ];
 
 // All items flat for mobile
@@ -163,7 +118,6 @@ const mobileItems: NavItem[] = [
   { href: "/quellen", label: "Quellen", icon: IconSources },
   { href: "/search", label: "Suche", icon: IconSearch },
   { href: "/chat", label: "Chat", icon: IconChat },
-  { href: "/companies", label: "Mehr", icon: IconCompany },
 ];
 
 // ─── Desktop sidebar nav ──────────────────────────────────────────────
@@ -195,6 +149,21 @@ export function Nav({ isAdmin, hasPhoneAssistant }: { isAdmin?: boolean; hasPhon
           </ul>
         </div>
       ))}
+
+      {/* Berechtigungen — visible to all org members */}
+      <div>
+        <p
+          className="text-[11px] font-semibold uppercase tracking-widest mb-1.5 px-3"
+          style={{ color: "var(--color-placeholder)" }}
+        >
+          Verwaltung
+        </p>
+        <ul className="flex flex-col gap-0.5">
+          <li>
+            <NavLink item={{ href: "/berechtigungen", label: "Berechtigungen", icon: IconShield }} pathname={pathname} />
+          </li>
+        </ul>
+      </div>
 
       {hasPhoneAssistant && (
         <div>
@@ -316,13 +285,6 @@ export function MobileNav() {
           item.href === "/"
             ? pathname === "/"
             : pathname === item.href || pathname.startsWith(item.href + "/");
-        // "Mehr" covers operative pages
-        const isMore = item.label === "Mehr";
-        const moreActive =
-          isMore &&
-          (pathname.startsWith("/companies") ||
-            pathname.startsWith("/contacts") ||
-            pathname.startsWith("/projects"));
         const Icon = item.icon;
 
         return (
@@ -331,7 +293,7 @@ export function MobileNav() {
             href={item.href}
             className="flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] transition-colors"
             style={{
-              color: active || moreActive ? "var(--color-accent)" : "var(--color-muted)",
+              color: active ? "var(--color-accent)" : "var(--color-muted)",
             }}
           >
             <Icon size={22} />
