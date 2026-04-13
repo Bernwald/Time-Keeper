@@ -4,7 +4,7 @@ import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
 import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
 import { AutoRefreshWhileSyncing } from "./auto-refresh";
-import { RetryButton, DeleteButton, ReconcileButton } from "./retry-button";
+import { RetryButton, ReindexButton, DeleteButton, ReconcileButton } from "./retry-button";
 
 export const dynamic = "force-dynamic";
 
@@ -365,7 +365,8 @@ function ConnectorCard(props: {
                         öffnen
                       </a>
                     )}
-                    <RetryButton sourceId={f.id} />
+                    {state === "failed" && <RetryButton sourceId={f.id} />}
+                    {state === "indexed" && <ReindexButton sourceId={f.id} />}
                     <DeleteButton sourceId={f.id} />
                   </div>
                 </li>

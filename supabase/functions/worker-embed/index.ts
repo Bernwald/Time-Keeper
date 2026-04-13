@@ -13,7 +13,7 @@
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
 import { readBatch, ack, deadLetter } from "../_shared/queue.ts";
 import { embedText } from "../_shared/embeddings.ts";
-import { chunkText, chunkTabularText } from "../_shared/chunking.ts";
+import { chunkText, chunkTabularText, chunkVerticalText } from "../_shared/chunking.ts";
 
 const QUEUE                = "embed";
 const VISIBILITY_TIMEOUT   = 120;
@@ -38,6 +38,10 @@ interface EmbedMsg {
   // source_type='entity' row. Without this the connector rows stay forever
   // on sync_status='queued' and the /quellen progress bar never advances.
   source_id?:      string;
+  // When a large sheet is split into multiple messages, only the first part
+  // carries replace_sheet=true so the embed worker deletes old chunks once.
+  // Subsequent parts (replace_sheet=false) append without deleting.
+  replace_sheet?:  boolean;
 }
 
 Deno.serve(async (req) => {
@@ -58,11 +62,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Detect tabular content (Markdown tables from xlsx extraction) and
-      // use the structure-aware chunker so column headers repeat in every chunk.
+      // Detect structured content from xlsx extraction:
+      // - Tabular: Markdown tables with "|" rows
+      // - Vertical: key-value blocks with "### Zeile" headers (wide tables)
       const sheetMatch = text.match(/^## Sheet:\s*(.+)/m);
       const msgSheetName = sheetMatch?.[1]?.trim() ?? null;
-      const isTabular = !!sheetMatch && text.includes("\n|");
+      const isTabular  = !!sheetMatch && text.includes("\n|");
+      const isVertical = !!sheetMatch && !isTabular && text.includes("### Zeile");
 
       // Strip trailing empty columns from Markdown tables. Older extractions
       // may carry dozens of empty "|  " columns that bloat each chunk.
@@ -88,11 +94,13 @@ Deno.serve(async (req) => {
           }).join("\n");
         }
       }
-      console.log("[worker-embed] chunking", { msg_id: m.msg_id, isTabular, textLen: text.length });
+      console.log("[worker-embed] chunking", { msg_id: m.msg_id, isTabular, isVertical, textLen: text.length });
       let chunks;
       try {
         chunks = isTabular
           ? chunkTabularText(text, { targetTokens: 400 })
+          : isVertical
+          ? chunkVerticalText(text, { targetTokens: 400 })
           : chunkText(text, { targetTokens: 400, overlapTokens: 50 });
       } catch (chunkErr) {
         console.error("[worker-embed] chunking FAILED", { msg_id: m.msg_id, error: chunkErr instanceof Error ? chunkErr.message : String(chunkErr), stack: chunkErr instanceof Error ? chunkErr.stack : undefined });
@@ -199,17 +207,21 @@ Deno.serve(async (req) => {
       // 3. Replace existing chunks for this source. For multi-sheet xlsx
       //    each sheet arrives as a separate message — only delete chunks
       //    belonging to the same sheet, not the whole source.
-      //    msgSheetName is extracted from the "## Sheet:" header and covers
-      //    both tabular and non-tabular sheet sections.
-      let delQuery = supabase
-        .from("content_chunks")
-        .delete()
-        .eq("source_id", sourceId);
-      if (msgSheetName) {
-        delQuery = delQuery.eq("metadata->>sheet_name", msgSheetName);
+      //    When a large sheet is split into multiple messages, only the
+      //    first part (replace_sheet=true) deletes; subsequent parts
+      //    (replace_sheet=false) append to avoid overwriting each other.
+      const shouldDelete = msg.replace_sheet !== false;
+      if (shouldDelete) {
+        let delQuery = supabase
+          .from("content_chunks")
+          .delete()
+          .eq("source_id", sourceId);
+        if (msgSheetName) {
+          delQuery = delQuery.contains("metadata", { sheet_name: msgSheetName });
+        }
+        const { error: delErr } = await delQuery;
+        if (delErr) throw delErr;
       }
-      const { error: delErr } = await delQuery;
-      if (delErr) throw delErr;
 
       const rows = chunks.map((c, i) => ({
         organization_id: msg.organization_id,
@@ -252,8 +264,10 @@ Deno.serve(async (req) => {
       await ack(QUEUE, m.msg_id);
       processed++;
     } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      console.error("[worker-embed] failed", { msg_id: m.msg_id, source_id: msg.source_id, attempt: m.read_ct, error: error.message });
+      // Supabase errors are plain objects with .message, not Error instances.
+      const errMsg = (err as { message?: string })?.message ?? JSON.stringify(err);
+      const error = err instanceof Error ? err : new Error(errMsg);
+      console.error("[worker-embed] failed", { msg_id: m.msg_id, source_id: msg.source_id, attempt: m.read_ct, error: errMsg });
       if (m.read_ct >= MAX_ATTEMPTS_PER_MSG) {
         // Permanent failure — mark the connector source as error so the user
         // sees it in /quellen instead of stuck on "wartet" forever.

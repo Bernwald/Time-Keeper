@@ -156,6 +156,76 @@ function splitWithOffsets(
 }
 
 // ---------------------------------------------------------------------------
+// Vertical (key-value) chunking — splits "### Zeile N" blocks (produced by
+// gridToMarkdown for wide tables) into chunks that keep complete records
+// together. Each chunk includes the "## Sheet:" header for context.
+// ---------------------------------------------------------------------------
+
+export function chunkVerticalText(
+  input: string,
+  opts: { targetTokens?: number } = {},
+): Chunk[] {
+  const targetTokens = opts.targetTokens ?? 400;
+  const targetChars  = targetTokens * CHARS_PER_TOKEN;
+
+  const text = (input ?? "").trim();
+  if (!text) return [];
+
+  // Extract "## Sheet:" header (first line).
+  const lines = text.split("\n");
+  const sheetHeader = lines[0]?.startsWith("## Sheet:") ? lines[0] : "";
+  const sheetMatch = sheetHeader.match(/^## Sheet:\s*(.+)/);
+  const sheetName  = sheetMatch?.[1]?.trim() ?? undefined;
+
+  // Split on "### Zeile" boundaries into complete record blocks.
+  const blocks: string[] = [];
+  let current = "";
+  for (let i = sheetHeader ? 1 : 0; i < lines.length; i++) {
+    if (lines[i].startsWith("### Zeile") && current.trim()) {
+      blocks.push(current.trim());
+      current = "";
+    }
+    current += (current ? "\n" : "") + lines[i];
+  }
+  if (current.trim()) blocks.push(current.trim());
+
+  if (blocks.length === 0) {
+    return chunkText(text, { targetTokens, overlapTokens: 50 });
+  }
+
+  // Pack blocks into chunks up to targetChars, never splitting a block.
+  const chunks: Chunk[] = [];
+  let buf = sheetHeader;
+  let bufStart = 0;
+
+  const flush = () => {
+    const trimmed = buf.trim();
+    if (!trimmed || trimmed === sheetHeader.trim()) return;
+    chunks.push({
+      index:      chunks.length,
+      text:       trimmed,
+      charStart:  bufStart,
+      charEnd:    bufStart + trimmed.length,
+      tokenCount: estimateTokens(trimmed),
+      sheetName,
+    });
+  };
+
+  for (const block of blocks) {
+    // If adding this block would exceed the budget, flush first.
+    if (buf.length + 1 + block.length > targetChars && buf !== sheetHeader) {
+      flush();
+      buf = sheetHeader;
+      bufStart = chunks.length > 0 ? chunks[chunks.length - 1].charEnd : 0;
+    }
+    buf += "\n\n" + block;
+  }
+  flush();
+
+  return chunks;
+}
+
+// ---------------------------------------------------------------------------
 // Tabular chunking — splits Markdown-table text (produced by the xlsx
 // extractor) into chunks that preserve column headers in every chunk.
 // ---------------------------------------------------------------------------

@@ -20,7 +20,7 @@ Wiederverwendbare AI Foundation Platform. Eigenes Startup = erster Tenant. Gleic
 
 ## Regeln (nicht verhandelbar)
 
-1. **Kein lokaler Dev-Server** — kein `npm run dev/build`. Push → Vercel verifiziert.
+1. **Lokales Testen Pflicht** — TypeCheck + Lint vor jedem Push. Build + Dev-Server bei Bedarf. Production nur via PR-Merge nach `main`.
 2. **Tokens only + Dark Mode** — Farben/Radii nur aus `globals.css`. Keine Ad-hoc-Farben (`#fff`, `bg-white` etc.). Dark Mode ist aktiv — alle neuen Features müssen mit Light- und Dark-Tokens funktionieren.
 3. **Mobile-first ab 360px** — Breakpoints: `md:` 768px · `lg:` 1024px. Kein horizontaler Scroll.
 4. **Touch: 44px** — `min-h-[44px] min-w-[44px]` auf allen interaktiven Elementen.
@@ -41,14 +41,26 @@ Vor Planung oder Umsetzung jeder nicht-trivialen Aufgabe:
 
 Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere durchläuft das Gate.
 
-## Deployment — Claude führt aus
+## Deployment — Workflow
 
-```bash
-git push
-supabase db push
-supabase functions deploy
-vercel --prod
-```
+### Entwicklung (Claude führt aus)
+
+1. Feature-Branch erstellen: `git checkout -b feature/beschreibung`
+2. Code schreiben + ändern
+3. Qualitätsprüfung (Pflicht vor jedem Push):
+   - `npm run typecheck --workspace apps/web`
+   - `npm run lint --workspace apps/web`
+   - Bei größeren Änderungen: `npm run build --workspace apps/web`
+   - Bei UI-Änderungen: Dev-Server starten + Preview-Tools für visuelle Prüfung
+4. Commit + Push auf Feature-Branch
+5. Vercel Preview-URL an User melden
+6. User testet Preview → gibt Freigabe oder Feedback
+
+### Produktion (User entscheidet)
+
+- User merged PR in `main` → Vercel Production Deploy
+- `supabase db push` — nur nach User-Freigabe
+- `supabase functions deploy` — nur nach User-Freigabe
 
 ## Sprachrichtlinie
 

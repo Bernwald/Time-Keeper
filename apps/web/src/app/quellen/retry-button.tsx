@@ -9,7 +9,7 @@ import {
   reconcileConnector,
 } from "./actions";
 
-type IconKind = "retry" | "delete" | "restore" | "purge" | "reconcile";
+type IconKind = "retry" | "delete" | "restore" | "purge" | "reconcile" | "reindex";
 
 const ICON: Record<IconKind, string> = {
   retry: "↻",
@@ -17,6 +17,7 @@ const ICON: Record<IconKind, string> = {
   restore: "↶",
   purge: "✕",
   reconcile: "✓",
+  reindex: "⟳",
 };
 
 const LABEL: Record<IconKind, string> = {
@@ -25,6 +26,7 @@ const LABEL: Record<IconKind, string> = {
   restore: "Wiederherstellen",
   purge: "Endgültig löschen",
   reconcile: "Aufräumen",
+  reindex: "Neu indexieren",
 };
 
 function ActionButton(props: {
@@ -99,6 +101,10 @@ export function PurgeButton({ sourceId }: { sourceId: string }) {
       withLabel
     />
   );
+}
+
+export function ReindexButton({ sourceId }: { sourceId: string }) {
+  return <ActionButton kind="reindex" onAction={() => retrySource(sourceId)} />;
 }
 
 export function ReconcileButton({
