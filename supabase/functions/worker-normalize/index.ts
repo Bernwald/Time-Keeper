@@ -169,30 +169,6 @@ async function normalizeGoogleCalendarEvent(
     }, { onConflict: "organization_id,provider_id,external_id" });
 
   if (error) throw error;
-
-  // Hand off to the embed worker so the entity lands in the RAG layer.
-  const summary     = (payload.summary as string)     ?? "";
-  const description = (payload.description as string) ?? "";
-  const location    = (payload.location as string)    ?? "";
-  const text = [
-    summary,
-    start ? `Beginn: ${start}` : "",
-    end   ? `Ende: ${end}`     : "",
-    location ? `Ort: ${location}` : "",
-    description,
-  ].filter(Boolean).join("\n").trim();
-
-  if (text) {
-    await enqueue("embed", {
-      organization_id: msg.organization_id,
-      provider_id:     msg.provider_id,
-      entity_type:     msg.entity_type,
-      external_id:     msg.external_id,
-      run_id:          msg.run_id,
-      title:           summary || `Termin ${msg.external_id}`,
-      text,
-    });
-  }
 }
 
 Deno.serve(async (req) => {
