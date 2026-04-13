@@ -1,8 +1,5 @@
 import Link from "next/link";
 import { listSources, countReadySources } from "@/lib/db/queries/sources";
-import { countCompanies } from "@/lib/db/queries/companies";
-import { countContacts } from "@/lib/db/queries/contacts";
-import { countProjects } from "@/lib/db/queries/projects";
 import { btn, page, styles } from "@/components/ui/table-classes";
 
 // Dashboard uses count helpers (head: true) and a short recent-sources list —
@@ -10,17 +7,11 @@ import { btn, page, styles } from "@/components/ui/table-classes";
 export const revalidate = 30;
 
 export default async function HomePage() {
-  const [recentSources, readySources, companyCount, contactCount, projectCount] = await Promise.all([
+  const [recentSources, readySources] = await Promise.all([
     listSources({ limit: 5 }),
     countReadySources(),
-    countCompanies(),
-    countContacts(),
-    countProjects(),
   ]);
   const sources = recentSources;
-  const companies = { length: companyCount };
-  const contacts = { length: contactCount };
-  const projects = { length: projectCount };
 
   return (
     <div className="flex flex-col">
@@ -70,10 +61,7 @@ export default async function HomePage() {
       <div className={page.wrapper}>
         {/* Stats grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 stagger-children -mt-6 md:-mt-8">
-          <StatCard value={readySources} label="Quellen" href="/sources" color="var(--color-accent)" />
-          <StatCard value={companies.length} label="Unternehmen" href="/companies" color="var(--color-info)" />
-          <StatCard value={contacts.length} label="Kontakte" href="/contacts" color="var(--color-warning)" />
-          <StatCard value={projects.length} label="Projekte" href="/projects" color="var(--color-success)" />
+          <StatCard value={readySources} label="Quellen" href="/quellen" color="var(--color-accent)" />
         </div>
 
         {/* Quick actions */}
@@ -92,30 +80,6 @@ export default async function HomePage() {
               <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
             </svg>
             Suchen
-          </Link>
-          <Link
-            href="/companies/new"
-            className={btn.secondary}
-            style={{
-              background: "var(--color-panel)",
-              color: "var(--color-text)",
-              border: "1px solid var(--color-line)",
-              boxShadow: "var(--shadow-xs)",
-            }}
-          >
-            + Unternehmen
-          </Link>
-          <Link
-            href="/contacts/new"
-            className={btn.secondary}
-            style={{
-              background: "var(--color-panel)",
-              color: "var(--color-text)",
-              border: "1px solid var(--color-line)",
-              boxShadow: "var(--shadow-xs)",
-            }}
-          >
-            + Kontakt
           </Link>
         </div>
 

@@ -102,20 +102,6 @@ export default async function CallDetailPage({
               </p>
             </div>
           )}
-          {call.contact_id && (
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide" style={styles.muted}>
-                Kontakt
-              </p>
-              <Link
-                href={`/contacts/${call.contact_id}`}
-                className="text-sm font-medium mt-0.5 inline-block"
-                style={{ color: "var(--color-accent)" }}
-              >
-                Zum Kontakt &rarr;
-              </Link>
-            </div>
-          )}
         </div>
       </div>
 
@@ -201,15 +187,6 @@ export default async function CallDetailPage({
             style={styles.accentSoft}
           >
             Quelle anzeigen
-          </Link>
-        )}
-        {call.activity_id && (
-          <Link
-            href={`/activities/${call.activity_id}`}
-            className="text-xs font-medium px-3 min-h-[44px] inline-flex items-center rounded-xl"
-            style={styles.accentSoft}
-          >
-            Aktivitaet anzeigen
           </Link>
         )}
       </div>

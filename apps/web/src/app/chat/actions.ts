@@ -178,6 +178,10 @@ export async function sendMessage(
   const trimmed = question.trim();
   if (!trimmed) return { type: "chunks", items: [] };
 
+  // Resolve current user for permission-filtered search
+  const { data: { user } } = await db.auth.getUser();
+  const userId = user?.id;
+
   // 1. Load history
   const { data: historyRows } = await db
     .from("chat_messages")
@@ -217,11 +221,11 @@ export async function sendMessage(
   //  so hybrid ranking leaves some contacts out of the context window).
   const [knowledgeChunks, opEntities, exhaustive] = await Promise.all([
     boostIds.length > 0
-      ? boostedHybridSearch(searchQuery, boostIds, RETRIEVAL_LIMIT)
-      : hybridSearch(searchQuery, RETRIEVAL_LIMIT),
+      ? boostedHybridSearch(searchQuery, boostIds, RETRIEVAL_LIMIT, userId)
+      : hybridSearch(searchQuery, RETRIEVAL_LIMIT, userId),
     searchOperationalEntities(searchQuery, 100, listing.isListing ? "exhaustive" : "search"),
     listing.isListing
-      ? listAllChunksByType(listing.types, LISTING_LIMIT)
+      ? listAllChunksByType(listing.types, LISTING_LIMIT, userId)
       : Promise.resolve([] as ChunkSearchResult[]),
   ]);
 
@@ -230,7 +234,7 @@ export async function sendMessage(
   let chunks = dedupeChunks([...exhaustive, ...opEntities, ...knowledgeChunks]);
 
   if (chunks.length === 0 && boostIds.length > 0) {
-    chunks = await chunksBySourceIds(boostIds, RETRIEVAL_LIMIT);
+    chunks = await chunksBySourceIds(boostIds, RETRIEVAL_LIMIT, userId);
   }
 
   const entityContext =

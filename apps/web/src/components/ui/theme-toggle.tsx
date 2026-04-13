@@ -20,12 +20,10 @@ function applyTheme(theme: Theme) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
   useEffect(() => {
-    const stored = getStoredTheme();
-    setTheme(stored);
-    applyTheme(stored);
+    applyTheme(theme);
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
@@ -33,7 +31,7 @@ export function ThemeToggle() {
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, []);
+  }, [theme]);
 
   const cycle = () => {
     const order: Theme[] = ["system", "light", "dark"];

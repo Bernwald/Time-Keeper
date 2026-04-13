@@ -121,21 +121,117 @@ async function normalizeDriveItem(
     : [rawText];
 
   for (const section of sections) {
-    const text = section.length > MAX_ENQUEUE_CHARS
-      ? section.slice(0, MAX_ENQUEUE_CHARS)
-      : section;
+    // Split oversized sections into sub-parts instead of truncating.
+    const parts = section.length > MAX_ENQUEUE_CHARS
+      ? splitSheetSection(section, MAX_ENQUEUE_CHARS)
+      : [section];
 
-    await enqueue("embed", {
-      organization_id: msg.organization_id,
-      provider_id: msg.provider_id,
-      entity_type: msg.entity_type,
-      external_id: externalId,
-      run_id: msg.run_id,
-      title,
-      text,
-      source_id: upsertRow.source_id,
-    });
+    for (let pi = 0; pi < parts.length; pi++) {
+      await enqueue("embed", {
+        organization_id: msg.organization_id,
+        provider_id: msg.provider_id,
+        entity_type: msg.entity_type,
+        external_id: externalId,
+        run_id: msg.run_id,
+        title,
+        text: parts[pi],
+        source_id: upsertRow.source_id,
+        // First part replaces existing chunks for this sheet; subsequent
+        // parts append so they don't delete each other's chunks.
+        replace_sheet: pi === 0,
+      } as Record<string, unknown>);
+    }
   }
+}
+
+// Split a single sheet section that exceeds maxChars into multiple
+// sub-sections. Each sub-section keeps the "## Sheet:" header so the
+// embed worker can identify the sheet. Splitting strategy:
+//   1. Vertical format ("### Zeile" blocks) — split on block boundaries.
+//   2. Tabular format (Markdown rows starting with "|") — split on row
+//      boundaries, repeating the table header + separator in each part.
+//   3. Fallback — hard split at maxChars boundary on newlines.
+function splitSheetSection(section: string, maxChars: number): string[] {
+  const lines = section.split("\n");
+  // Extract the "## Sheet: ..." header line.
+  const sheetHeader = lines[0]?.startsWith("## Sheet:") ? lines[0] : "";
+
+  // --- Vertical format (### Zeile blocks) ---
+  if (section.includes("### Zeile")) {
+    const blocks: string[] = [];
+    let current = "";
+    for (let i = sheetHeader ? 1 : 0; i < lines.length; i++) {
+      if (lines[i].startsWith("### Zeile") && current.trim()) {
+        blocks.push(current);
+        current = "";
+      }
+      current += (current ? "\n" : "") + lines[i];
+    }
+    if (current.trim()) blocks.push(current);
+
+    const parts: string[] = [];
+    let buf = sheetHeader;
+    for (const block of blocks) {
+      if (buf.length + 1 + block.length > maxChars && buf !== sheetHeader) {
+        parts.push(buf);
+        buf = sheetHeader;
+      }
+      buf += (buf ? "\n" : "") + block;
+    }
+    if (buf.trim()) parts.push(buf);
+    return parts.length > 0 ? parts : [section.slice(0, maxChars)];
+  }
+
+  // --- Tabular format (Markdown table rows) ---
+  if (section.includes("\n|")) {
+    let tableHeader = "";
+    let separator = "";
+    const dataRows: string[] = [];
+    let foundHeader = false;
+
+    for (let i = sheetHeader ? 1 : 0; i < lines.length; i++) {
+      if (!foundHeader && lines[i].startsWith("|")) {
+        tableHeader = lines[i];
+        if (i + 1 < lines.length && /^\|[\s\-|]+\|$/.test(lines[i + 1])) {
+          separator = lines[i + 1];
+          i++;
+        }
+        foundHeader = true;
+        continue;
+      }
+      if (lines[i].startsWith("|")) {
+        dataRows.push(lines[i]);
+      }
+    }
+
+    if (tableHeader && dataRows.length > 0) {
+      const prefix = [sheetHeader, tableHeader, separator].filter(Boolean).join("\n");
+      const parts: string[] = [];
+      let buf = prefix;
+      for (const row of dataRows) {
+        if (buf.length + 1 + row.length > maxChars && buf !== prefix) {
+          parts.push(buf);
+          buf = prefix;
+        }
+        buf += "\n" + row;
+      }
+      if (buf !== prefix) parts.push(buf);
+      return parts.length > 0 ? parts : [section.slice(0, maxChars)];
+    }
+  }
+
+  // --- Fallback: split on newline boundaries ---
+  const parts: string[] = [];
+  let buf = "";
+  for (const line of lines) {
+    if (buf.length + 1 + line.length > maxChars && buf.trim()) {
+      parts.push(buf);
+      buf = sheetHeader;
+    }
+    buf += (buf ? "\n" : "") + line;
+  }
+  if (buf.trim()) parts.push(buf);
+  return parts.length > 0 ? parts : [section.slice(0, maxChars)];
 }
 
 async function normalizeGoogleCalendarEvent(
