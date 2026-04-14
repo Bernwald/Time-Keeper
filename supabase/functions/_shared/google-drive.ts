@@ -285,7 +285,14 @@ function parseSheetGrid(
     const cells: Array<{ col: number; value: string }> = [];
 
     // Match each <c> cell.
-    const cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/gi;
+    //
+    // NOTE: the attribute group MUST be lazy (`[^>]*?`). A greedy `[^>]*`
+    // would swallow the `/` in self-closing `<c r="R48" s="27"/>` tags,
+    // so the `\/>` alternative never fires — instead the engine backtracks
+    // and matches `>...<\/c>` against the NEXT cell, shifting every
+    // following column by one. Google Sheets exports emit self-closing
+    // tags for empty cells, which is how this bug surfaces in practice.
+    const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi;
     let cellMatch: RegExpExecArray | null;
     while ((cellMatch = cellRe.exec(rowContent)) !== null) {
       const attrs = cellMatch[1];
@@ -630,6 +637,14 @@ function segmentsToStructured(sheetName: string, segments: TableSegment[]): stri
       lines.push(`### Zeile ${record.originRow} — ${record.title}`);
       // Pipe-separated single line keeps records compact (more per chunk)
       // while still pairing each value with its header token for FTS.
+      // We tried one-field-per-line for cleaner LLM extraction, but it
+      // shifted FTS rank density (the cover-density score drops when
+      // matched terms spread across many lines), pushing the right chunk
+      // out of the top-30 FTS pool — so questions like
+      // "Wie viele kostenlose Lizenzen hatte Biofach Vivaness 2025?"
+      // started returning "keine Informationen" even though the data
+      // was in a chunk. Pipe format keeps both retrieval AND extraction
+      // working.
       lines.push(
         record.fields
           .map((f) => `${f.header}: ${f.value}`)
