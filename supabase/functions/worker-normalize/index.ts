@@ -120,12 +120,31 @@ async function normalizeDriveItem(
     ? rawText.split(/(?=^## Sheet:)/m).filter((s) => s.trim())
     : [rawText];
 
-  for (const section of sections) {
-    // Split oversized sections into sub-parts instead of truncating.
-    const parts = section.length > MAX_ENQUEUE_CHARS
+  // Precompute all parts so we can seed the progress counter before the
+  // embed worker starts consuming messages. Otherwise a fast worker could
+  // process (and increment) the first message before we've set the total.
+  const sectionParts: string[][] = sections.map((section) =>
+    section.length > MAX_ENQUEUE_CHARS
       ? splitSheetSection(section, MAX_ENQUEUE_CHARS)
-      : [section];
+      : [section],
+  );
+  const totalParts = sectionParts.reduce((sum, parts) => sum + parts.length, 0);
 
+  // Reset progress + mark the source as processing before enqueueing. The
+  // embed worker will atomically increment embed_jobs_done as it finishes
+  // each message and only flip status='ready' once done >= total.
+  await supabase
+    .from("sources")
+    .update({
+      status:           "processing",
+      sync_status:      "queued",
+      embed_jobs_total: totalParts,
+      embed_jobs_done:  0,
+    })
+    .eq("id", upsertRow.source_id)
+    .eq("organization_id", msg.organization_id);
+
+  for (const parts of sectionParts) {
     for (let pi = 0; pi < parts.length; pi++) {
       await enqueue("embed", {
         organization_id: msg.organization_id,

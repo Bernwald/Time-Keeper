@@ -16,6 +16,11 @@ export type Source = {
   connector_type: string | null;
   sync_status: string | null;
   source_url: string | null;
+  // Only populated by getSourceById (select "*"). listSources omits them
+  // so the overview keeps working on environments where the migration
+  // hasn't been applied yet.
+  embed_jobs_total?: number;
+  embed_jobs_done?: number;
 };
 
 const DEFAULT_LIMIT = 200;
