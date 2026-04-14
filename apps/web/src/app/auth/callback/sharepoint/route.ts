@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { saveSharepointTokens } from "@/app/quellen/actions";
+import { getAppUrl } from "@/lib/app-url";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
   const tenantId = process.env.MICROSOFT_TENANT_ID || "common";
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback/sharepoint`;
+  const redirectUri = `${getAppUrl()}/auth/callback/sharepoint`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(new URL("/quellen?error=misconfigured", req.url));
