@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getConversation, listConversations, getAvailableModels } from "../actions";
+import { isPlatformAdmin } from "@/lib/db/queries/organization";
 import ChatLayout from "../_components/chat-layout";
 
 export default async function ChatConversationPage({
@@ -9,10 +10,11 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
 
-  const [data, conversations, models] = await Promise.all([
+  const [data, conversations, models, isAdmin] = await Promise.all([
     getConversation(id),
     listConversations(50),
     getAvailableModels(),
+    isPlatformAdmin(),
   ]);
 
   if (!data) notFound();
@@ -24,6 +26,7 @@ export default async function ChatConversationPage({
       messages={data.messages}
       conversations={conversations}
       models={models}
+      isAdmin={isAdmin}
     />
   );
 }

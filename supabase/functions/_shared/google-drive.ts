@@ -363,43 +363,263 @@ function parseSheetGrid(
   return grid;
 }
 
-// Escape pipe characters inside cell values for Markdown tables.
-function escPipe(s: string): string {
-  return s.replace(/\|/g, "\\|");
+// ---------------------------------------------------------------------------
+// Structured sheet rendering.
+//
+// Sheets in the wild don't follow a single layout: headers can be on top
+// (row-major) or on the left (column-major, transposed); a single sheet can
+// contain multiple sub-tables separated by empty rows. The previous renderer
+// assumed row-major + single table and packed rows into a Markdown grid,
+// which made individual records hard to find via keyword search (the entity
+// name appeared once while header tokens dominated every chunk).
+//
+// New pipeline:
+//   1. segmentSheet(grid)       split sheet at ≥2 empty rows into sub-tables
+//   2. detectOrientation(seg)   header-top vs header-left heuristic
+//   3. segmentToRecords(seg,o)  extract per-record field lists
+//   4. segmentsToStructured()   emit "### Zeile N — <title>" blocks so FTS
+//                               and embedding pipelines see every record as
+//                               a self-contained unit, yet multiple records
+//                               are packed into a single chunk downstream.
+// ---------------------------------------------------------------------------
+
+interface TableSegment {
+  /** Data rows of this sub-table (sparse, may contain empty cells). */
+  rows: string[][];
+  /** 1-based row number of the first row in the original sheet (provenance). */
+  originRow: number;
 }
 
-// Format a 2D grid as a Markdown table. For very wide tables (single row
-// exceeds ~300 tokens ≈ 1200 chars), switch to a vertical key-value format.
-function gridToMarkdown(grid: string[][], sheetName: string): string {
-  if (grid.length === 0) return "";
+interface ExtractedRecord {
+  /** Short title shown in the block header — helps FTS and humans locate rows. */
+  title: string;
+  /** 1-based row number in the original sheet. */
+  originRow: number;
+  /** Ordered key/value fields (empty values dropped). */
+  fields: Array<{ header: string; value: string }>;
+}
 
-  const headers = grid[0];
-  const dataRows = grid.slice(1);
+function isRowEmpty(row: string[]): boolean {
+  return row.every((c) => !c || !c.trim());
+}
 
-  // Estimate width of one row in characters.
-  const sampleRow = headers.join(" | ");
-  const isWide = sampleRow.length > 1200;
+function looksNumeric(s: string): boolean {
+  if (!s) return false;
+  const t = s.trim();
+  if (!t) return false;
+  // Accept "1.234,56", "1234.56", "42", "2023", "42 €", "-3,5%".
+  return /^-?\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d+)?\s*[%€$]?$/.test(t) || /^-?\d+([.,]\d+)?$/.test(t);
+}
 
+/** Split a sheet grid into sub-tables at runs of ≥2 consecutive empty rows. */
+function segmentSheet(grid: string[][]): TableSegment[] {
+  const segments: TableSegment[] = [];
+  let buffer: string[][] = [];
+  let bufferOrigin = 1; // 1-based
+  let emptyRun = 0;
+
+  const flush = () => {
+    // Drop trailing empty rows inside the buffer before emitting.
+    while (buffer.length > 0 && isRowEmpty(buffer[buffer.length - 1])) {
+      buffer.pop();
+    }
+    if (buffer.length >= 2) {
+      segments.push({ rows: buffer, originRow: bufferOrigin });
+    }
+    buffer = [];
+  };
+
+  for (let r = 0; r < grid.length; r++) {
+    const row = grid[r];
+    if (isRowEmpty(row)) {
+      emptyRun++;
+      if (emptyRun >= 2 && buffer.length > 0) {
+        flush();
+      }
+      continue;
+    }
+    if (buffer.length === 0) {
+      bufferOrigin = r + 1; // 1-based
+    }
+    emptyRun = 0;
+    buffer.push(row);
+  }
+  flush();
+
+  // If no segments survived (e.g. entire sheet was one block with no gaps),
+  // fall back to the whole grid minus trailing empties.
+  if (segments.length === 0 && grid.length > 0) {
+    const trimmed: string[][] = [];
+    for (const row of grid) {
+      if (trimmed.length > 0 || !isRowEmpty(row)) trimmed.push(row);
+    }
+    while (trimmed.length > 0 && isRowEmpty(trimmed[trimmed.length - 1])) {
+      trimmed.pop();
+    }
+    if (trimmed.length > 0) {
+      segments.push({ rows: trimmed, originRow: 1 });
+    }
+  }
+
+  return segments;
+}
+
+/**
+ * Decide if a segment is row-major (header in row 0) or column-major
+ * (header in column 0, rotated/transposed layout).
+ *
+ * Heuristic: count numeric cells in row 0 vs column 0 (each excluding cell
+ * (0,0) which can be either a corner or a label). If row 0 is mostly numeric
+ * it's more likely data than a header → column-major. Otherwise row-major.
+ */
+function detectOrientation(segment: TableSegment): "row-major" | "column-major" {
+  if (segment.rows.length < 2) return "row-major";
+  const firstRow = segment.rows[0];
+  const rowLen   = firstRow.length;
+  if (rowLen < 2) return "row-major";
+
+  let rowNumeric = 0;
+  let rowFilled  = 0;
+  for (let c = 1; c < rowLen; c++) {
+    const v = firstRow[c] ?? "";
+    if (v.trim()) {
+      rowFilled++;
+      if (looksNumeric(v)) rowNumeric++;
+    }
+  }
+
+  let colNumeric = 0;
+  let colFilled  = 0;
+  for (let r = 1; r < segment.rows.length; r++) {
+    const v = segment.rows[r]?.[0] ?? "";
+    if (v.trim()) {
+      colFilled++;
+      if (looksNumeric(v)) colNumeric++;
+    }
+  }
+
+  const rowNumericRatio = rowFilled > 0 ? rowNumeric / rowFilled : 0;
+  const colNumericRatio = colFilled > 0 ? colNumeric / colFilled : 0;
+
+  // First row is mostly numbers while first col is mostly labels → transposed.
+  if (rowNumericRatio >= 0.6 && colNumericRatio <= 0.3 && colFilled >= 2) {
+    return "column-major";
+  }
+  return "row-major";
+}
+
+/** Shorten a value for use in a block title (max ~60 chars). */
+function shortValue(s: string): string {
+  const t = (s ?? "").trim();
+  if (t.length <= 60) return t;
+  return t.slice(0, 57) + "…";
+}
+
+/**
+ * Extract per-record data from a segment. Returns the header list + one
+ * ExtractedRecord per data entry (row for row-major, column for column-major).
+ */
+function segmentToRecords(
+  segment: TableSegment,
+  orientation: "row-major" | "column-major",
+): { headers: string[]; records: ExtractedRecord[] } {
+  if (orientation === "row-major") {
+    const headers = (segment.rows[0] ?? []).map((h) => (h ?? "").trim());
+    const records: ExtractedRecord[] = [];
+    for (let r = 1; r < segment.rows.length; r++) {
+      const row = segment.rows[r];
+      if (!row || isRowEmpty(row)) continue;
+      const fields: Array<{ header: string; value: string }> = [];
+      for (let c = 0; c < headers.length; c++) {
+        const value = (row[c] ?? "").trim();
+        if (!value) continue;
+        const header = headers[c] || `Spalte ${c + 1}`;
+        fields.push({ header, value });
+      }
+      if (fields.length === 0) continue;
+      // Title: first 1–2 field values (usually entity + year/label).
+      const head = shortValue(fields[0].value);
+      const tail = fields[1] && fields[1].value && fields[1].value !== head
+        ? ` ${shortValue(fields[1].value)}`
+        : "";
+      records.push({
+        title:     (head + tail).trim() || `Zeile ${segment.originRow + r}`,
+        originRow: segment.originRow + r,
+        fields,
+      });
+    }
+    return { headers, records };
+  }
+
+  // column-major: first column = headers, each subsequent column = one record.
+  const headers: string[] = [];
+  for (let r = 1; r < segment.rows.length; r++) {
+    headers.push(((segment.rows[r] ?? [])[0] ?? "").trim());
+  }
+  const records: ExtractedRecord[] = [];
+  const firstRow = segment.rows[0] ?? [];
+  const colCount = firstRow.length;
+  for (let c = 1; c < colCount; c++) {
+    const colLabel = (firstRow[c] ?? "").trim();
+    const fields: Array<{ header: string; value: string }> = [];
+    for (let r = 1; r < segment.rows.length; r++) {
+      const value = ((segment.rows[r] ?? [])[c] ?? "").trim();
+      if (!value) continue;
+      const header = headers[r - 1] || `Zeile ${r + 1}`;
+      fields.push({ header, value });
+    }
+    if (fields.length === 0) continue;
+    const head = colLabel || shortValue(fields[0]?.value ?? "");
+    records.push({
+      title:     head || `Spalte ${c + 1}`,
+      originRow: segment.originRow,
+      fields,
+    });
+  }
+  return { headers, records };
+}
+
+/**
+ * Render a sheet as one or more structured segments. Each record becomes a
+ * "### Zeile N — <title>" block with explicit "Header: Wert" lines so the
+ * downstream vertical chunker (chunking.ts:chunkVerticalText) packs complete
+ * records into chunks and FTS finds unique entity names easily.
+ */
+function segmentsToStructured(sheetName: string, segments: TableSegment[]): string {
   const lines: string[] = [`## Sheet: ${sheetName}`];
 
-  if (isWide) {
-    // Vertical format for wide tables: one "record" block per row.
-    for (let r = 0; r < dataRows.length; r++) {
+  for (let s = 0; s < segments.length; s++) {
+    const segment = segments[s];
+    const orientation = detectOrientation(segment);
+    const { headers, records } = segmentToRecords(segment, orientation);
+    if (records.length === 0) continue;
+
+    if (segments.length > 1) {
       lines.push("");
-      lines.push(`### Zeile ${r + 2}`);
-      for (let c = 0; c < headers.length; c++) {
-        const val = dataRows[r]?.[c] ?? "";
-        if (val) lines.push(`${headers[c]}: ${val}`);
-      }
+      lines.push(
+        `### Tabelle ${s + 1} (ab Zeile ${segment.originRow}, ${orientation === "column-major" ? "transponiert" : "Zeilen-Layout"})`,
+      );
+    } else if (orientation === "column-major") {
+      lines.push(`_Layout: transponiert (Spaltenkopf links)_`);
     }
-  } else {
-    // Standard Markdown table.
-    lines.push("| " + headers.map(escPipe).join(" | ") + " |");
-    lines.push("| " + headers.map(() => "---").join(" | ") + " |");
-    for (const row of dataRows) {
-      // Skip completely empty rows.
-      if (row.every((c) => !c)) continue;
-      lines.push("| " + row.map(escPipe).join(" | ") + " |");
+
+    // Compact column overview helps the LLM understand the schema before it
+    // sees the records.
+    const uniqueHeaders = headers.filter((h) => h && h.trim());
+    if (uniqueHeaders.length > 0) {
+      lines.push(`Spalten: ${uniqueHeaders.join(", ")}`);
+    }
+
+    for (const record of records) {
+      lines.push("");
+      lines.push(`### Zeile ${record.originRow} — ${record.title}`);
+      // Pipe-separated single line keeps records compact (more per chunk)
+      // while still pairing each value with its header token for FTS.
+      lines.push(
+        record.fields
+          .map((f) => `${f.header}: ${f.value}`)
+          .join(" | "),
+      );
     }
   }
 
@@ -442,7 +662,10 @@ async function extractXlsxStructured(
     if (grid.length === 0) continue;
 
     const name = sheetNames[i] ?? `Sheet${i + 1}`;
-    sections.push(gridToMarkdown(grid, name));
+    const segments = segmentSheet(grid);
+    if (segments.length === 0) continue;
+    const rendered = segmentsToStructured(name, segments);
+    if (rendered.trim()) sections.push(rendered);
   }
 
   const result = sections.join("\n\n").trim();

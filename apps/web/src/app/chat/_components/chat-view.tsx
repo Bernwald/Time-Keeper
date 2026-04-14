@@ -6,14 +6,24 @@ import { sendMessage } from "../actions";
 import type { ConversationListItem, StoredMessage } from "../actions";
 import type { ChatResponse, ModelId } from "@/lib/ai/chat";
 import { card, badge, btn, input, styles } from "@/components/ui/table-classes";
+import RetrievalDebug from "./retrieval-debug";
 
 type ModelOption = { id: ModelId; label: string; available: boolean };
+
+type LocalSource = {
+  source_title?: string;
+  source_type?: string;
+  chunk_text?: string;
+  chunk_index?: number;
+  rank?: number;
+  retrieved_via?: string;
+};
 
 type LocalMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources: Array<{ source_title?: string; chunk_text?: string }>;
+  sources: LocalSource[];
   model?: string | null;
   pending?: boolean;
 };
@@ -23,9 +33,7 @@ function toLocal(m: StoredMessage): LocalMessage {
     id: m.id,
     role: m.role === "system" ? "assistant" : (m.role as "user" | "assistant"),
     content: m.content,
-    sources: Array.isArray(m.sources)
-      ? (m.sources as Array<{ source_title?: string; chunk_text?: string }>)
-      : [],
+    sources: Array.isArray(m.sources) ? (m.sources as LocalSource[]) : [],
     model: m.model,
   };
 }
@@ -60,12 +68,14 @@ export default function ChatView({
   conversation,
   initialMessages,
   models,
+  isAdmin,
   onOpenDrawer,
 }: {
   conversationId: string;
   conversation: ConversationListItem;
   initialMessages: StoredMessage[];
   models: ModelOption[];
+  isAdmin: boolean;
   onOpenDrawer: () => void;
 }) {
   const router = useRouter();
@@ -312,6 +322,9 @@ export default function ChatView({
                   </div>
                 )}
               </div>
+              {isAdmin && msg.sources.length > 0 && (
+                <RetrievalDebug sources={msg.sources} />
+              )}
             </div>
           );
         })}
