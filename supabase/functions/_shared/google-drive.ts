@@ -265,12 +265,17 @@ function parseSheetNames(xml: string): string[] {
   return names;
 }
 
-// Parse a single sheet XML into a 2D string grid.
+// Parse a single sheet XML into a 2D string grid. Also counts cells that
+// carry a formula (<f>) but no cached value (<v>) — these show up when a
+// workbook is saved without recalculation (e.g. Google Sheets export, or
+// LibreOffice with manual calc), which would otherwise turn into silent
+// empty cells in the extracted text.
 function parseSheetGrid(
   xml: string,
   sharedStrings: string[],
-): string[][] {
+): { grid: string[][]; uncachedFormulas: number } {
   const rows: Array<{ rowIdx: number; cells: Array<{ col: number; value: string }> }> = [];
+  let uncachedFormulas = 0;
 
   // Match each <row> block.
   const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/gi;
@@ -306,9 +311,19 @@ function parseSheetGrid(
         const tMatch = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/i);
         value = tMatch ? decodeXmlEntities(tMatch[1]) : "";
       } else {
-        // Number, boolean, or other — take raw <v> content.
+        // Number, boolean, or formula result — take raw <v> content.
         const vMatch = inner.match(/<v>([\s\S]*?)<\/v>/i);
-        value = vMatch ? decodeXmlEntities(vMatch[1]) : "";
+        if (vMatch) {
+          value = decodeXmlEntities(vMatch[1]);
+        } else if (/<f[\s>]/i.test(inner)) {
+          // Formula present but no cached value — workbook was saved
+          // without recalculation. Emit an explicit placeholder so the
+          // LLM can flag the gap instead of treating the cell as empty.
+          value = "«Formel nicht berechnet»";
+          uncachedFormulas++;
+        } else {
+          value = "";
+        }
       }
 
       cells.push({ col: colIdx, value: value.trim() });
@@ -322,7 +337,7 @@ function parseSheetGrid(
     }
   }
 
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { grid: [], uncachedFormulas };
 
   // Determine grid dimensions.
   let maxCol = 0;
@@ -360,7 +375,7 @@ function parseSheetGrid(
     }
   }
 
-  return grid;
+  return { grid, uncachedFormulas };
 }
 
 // ---------------------------------------------------------------------------
@@ -626,10 +641,20 @@ function segmentsToStructured(sheetName: string, segments: TableSegment[]): stri
   return lines.join("\n");
 }
 
+/**
+ * Text extracted from a file plus optional diagnostics. `formulaWarnings`
+ * is populated only for xlsx files and maps sheet name → count of cells
+ * that carry a formula without a cached value.
+ */
+export type ExtractedContent = {
+  text: string;
+  formulaWarnings?: Record<string, number>;
+};
+
 // Main xlsx structured extractor. Accepts an already-opened JSZip instance.
 async function extractXlsxStructured(
   zip: { file: (path: string | RegExp) => any },
-): Promise<string | null> {
+): Promise<{ text: string; sheetWarnings: Record<string, number> } | null> {
   // 1. Parse shared strings.
   const sharedFile = zip.file("xl/sharedStrings.xml");
   const sharedStrings = sharedFile
@@ -656,12 +681,19 @@ async function extractXlsxStructured(
   });
 
   const sections: string[] = [];
+  const sheetWarnings: Record<string, number> = {};
   for (let i = 0; i < sheetFiles.length; i++) {
     const sheetXml = await sheetFiles[i].async("string");
-    const grid = parseSheetGrid(sheetXml, sharedStrings);
+    const { grid, uncachedFormulas } = parseSheetGrid(sheetXml, sharedStrings);
+    const name = sheetNames[i] ?? `Sheet${i + 1}`;
+    if (uncachedFormulas > 0) {
+      sheetWarnings[name] = uncachedFormulas;
+      console.warn(
+        `[xlsx] Sheet "${name}": ${uncachedFormulas} Formel-Zellen ohne cached value — Datei bitte in Excel öffnen & neu speichern.`,
+      );
+    }
     if (grid.length === 0) continue;
 
-    const name = sheetNames[i] ?? `Sheet${i + 1}`;
     const segments = segmentSheet(grid);
     if (segments.length === 0) continue;
     const rendered = segmentsToStructured(name, segments);
@@ -669,13 +701,14 @@ async function extractXlsxStructured(
   }
 
   const result = sections.join("\n\n").trim();
-  return result.length > 0 ? result : null;
+  if (result.length === 0 && Object.keys(sheetWarnings).length === 0) return null;
+  return { text: result, sheetWarnings };
 }
 
 export async function extractOoxmlText(
   bytes: Uint8Array,
   mimeType: string,
-): Promise<string | null> {
+): Promise<ExtractedContent | null> {
   // Lazy-load jszip only when we actually hit an OOXML file so the cold
   // start for text/html + Google-native files stays fast.
   const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
@@ -688,13 +721,19 @@ export async function extractOoxmlText(
   }
 
   const textParts: string[] = [];
+  let formulaWarnings: Record<string, number> | undefined;
 
   if (mimeType === DOCX_MIME) {
     const doc = zip.file("word/document.xml");
     if (doc) textParts.push(stripXml(await doc.async("string")));
   } else if (mimeType === XLSX_MIME) {
     const structured = await extractXlsxStructured(zip);
-    if (structured) textParts.push(structured);
+    if (structured) {
+      if (structured.text) textParts.push(structured.text);
+      if (Object.keys(structured.sheetWarnings).length > 0) {
+        formulaWarnings = structured.sheetWarnings;
+      }
+    }
   } else if (mimeType === PPTX_MIME) {
     const slideFiles = zip.file(/^ppt\/slides\/slide\d+\.xml$/);
     for (const slide of slideFiles) {
@@ -703,7 +742,8 @@ export async function extractOoxmlText(
   }
 
   const joined = textParts.join("\n\n").trim();
-  return joined.length > 0 ? joined : null;
+  if (joined.length === 0 && !formulaWarnings) return null;
+  return { text: joined, formulaWarnings };
 }
 
 async function downloadDriveBytes(
@@ -721,7 +761,7 @@ export async function downloadDriveFileText(
   accessToken: string,
   fileId: string,
   mimeType?: string,
-): Promise<string | null> {
+): Promise<ExtractedContent | null> {
   // Google-native docs need export, plain files use alt=media.
   if (mimeType === "application/vnd.google-apps.document") {
     const res = await fetch(
@@ -729,7 +769,7 @@ export async function downloadDriveFileText(
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!res.ok) return null;
-    return await res.text();
+    return { text: await res.text() };
   }
   if (mimeType === "application/vnd.google-apps.spreadsheet") {
     const res = await fetch(
@@ -737,7 +777,7 @@ export async function downloadDriveFileText(
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!res.ok) return null;
-    return await res.text();
+    return { text: await res.text() };
   }
   if (mimeType === "application/vnd.google-apps.presentation") {
     const res = await fetch(
@@ -745,7 +785,7 @@ export async function downloadDriveFileText(
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!res.ok) return null;
-    return await res.text();
+    return { text: await res.text() };
   }
 
   // Uploaded Office docs: download bytes, unzip, strip XML.
@@ -774,7 +814,7 @@ export async function downloadDriveFileText(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return null;
-  return await res.text();
+  return { text: await res.text() };
 }
 
 export async function patchDriveFile(

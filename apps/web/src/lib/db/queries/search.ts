@@ -16,7 +16,58 @@ export type ChunkSearchResult = {
    * debug panel to show *why* a chunk is in the context window.
    */
   retrieved_via?: "hybrid" | "boost" | "operational" | "listing" | "fallback";
+  /**
+   * Per-sheet count of cells that carry an Excel formula without a cached
+   * value (populated during xlsx ingest → sources.metadata.formula_warnings).
+   * Surfaced in the admin debug panel so the user knows which files need to
+   * be opened in Excel + re-saved to recompute.
+   */
+  formula_warnings?: Record<string, number>;
 };
+
+/**
+ * Batch-fetch `sources.metadata.formula_warnings` for all source_ids that
+ * appear in `chunks`. Attaches the warnings in-place (returns a new array).
+ * Missing or empty warnings leave the field undefined.
+ */
+export async function enrichChunksWithFormulaWarnings(
+  chunks: ChunkSearchResult[],
+): Promise<ChunkSearchResult[]> {
+  if (chunks.length === 0) return chunks;
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+
+  // Exclude pseudo-chunks from operational entities (contact/company/project)
+  // — those source_ids don't live in the `sources` table.
+  const sourceIds = Array.from(
+    new Set(
+      chunks
+        .filter((c) => !["contact", "company", "project"].includes(c.source_type))
+        .map((c) => c.source_id),
+    ),
+  );
+  if (sourceIds.length === 0) return chunks;
+
+  const { data } = await db
+    .from("sources")
+    .select("id, metadata")
+    .eq("organization_id", orgId)
+    .in("id", sourceIds);
+
+  const warningsById = new Map<string, Record<string, number>>();
+  for (const row of (data ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
+    const fw = row.metadata?.formula_warnings as Record<string, number> | undefined;
+    if (fw && typeof fw === "object" && Object.keys(fw).length > 0) {
+      warningsById.set(row.id, fw);
+    }
+  }
+
+  if (warningsById.size === 0) return chunks;
+  return chunks.map((c) => {
+    const fw = warningsById.get(c.source_id);
+    return fw ? { ...c, formula_warnings: fw } : c;
+  });
+}
 
 export async function fullTextSearch(query: string, limit = 10, userId?: string): Promise<ChunkSearchResult[]> {
   if (!query.trim()) return [];

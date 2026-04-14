@@ -15,7 +15,20 @@ type DebugSource = {
   chunk_index?: number;
   rank?: number;
   retrieved_via?: string;
+  /**
+   * Per-sheet count of cells with Excel formulas that have no cached value.
+   * Populated during xlsx ingest; surfaced here so the user knows the file
+   * needs to be opened in Excel + re-saved to recompute formulas.
+   */
+  formula_warnings?: Record<string, number>;
 };
+
+function totalFormulaWarnings(fw: Record<string, number> | undefined): number {
+  if (!fw) return 0;
+  let sum = 0;
+  for (const n of Object.values(fw)) sum += Number(n) || 0;
+  return sum;
+}
 
 const VIA_LABEL: Record<string, string> = {
   hybrid: "Hybrid (FTS+Vec+Trgm)",
@@ -112,6 +125,28 @@ export default function RetrievalDebug({
                             ` · #${s.chunk_index}`}
                         </div>
                       )}
+                      {(() => {
+                        const warnCount = totalFormulaWarnings(s.formula_warnings);
+                        if (warnCount === 0) return null;
+                        const sheetCount = Object.keys(s.formula_warnings ?? {}).length;
+                        const tooltip = Object.entries(s.formula_warnings ?? {})
+                          .map(([sheet, n]) => `${sheet}: ${n}`)
+                          .join("\n");
+                        return (
+                          <div
+                            className="mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                            style={{
+                              background: "var(--color-warning-soft)",
+                              color: "var(--color-warning)",
+                              border: "1px solid var(--color-warning)",
+                            }}
+                            title={`Formeln ohne cached Value – Datei in Excel öffnen und neu speichern:\n${tooltip}`}
+                          >
+                            ⚠ {warnCount} Formel{warnCount === 1 ? "" : "n"} unberechnet
+                            {sheetCount > 1 && ` (${sheetCount} Sheets)`}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="py-1.5 pr-2 align-top">
                       <span

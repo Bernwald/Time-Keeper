@@ -79,9 +79,14 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
         const fileId = ch.fileId ?? ch.file?.id;
         if (!fileId) continue;
         let text: string | null = null;
+        let formulaWarnings: Record<string, number> | undefined;
         if (!ch.removed && !ch.file?.trashed) {
           try {
-            text = await downloadDriveFileText(accessToken, fileId, ch.file?.mimeType);
+            const extracted = await downloadDriveFileText(accessToken, fileId, ch.file?.mimeType);
+            if (extracted) {
+              text = extracted.text;
+              formulaWarnings = extracted.formulaWarnings;
+            }
           } catch (err) {
             console.warn("[gdrive] download failed:", fileId, err);
           }
@@ -89,7 +94,11 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
         // Sanitize: Postgres JSONB rejects \u0000 (null bytes). Binary-ish
         // files (xlsx, docx, pdf) sometimes surface them in metadata.
         const cleanPayload = JSON.parse(
-          JSON.stringify({ ...ch, _extracted_text: text }).replace(/\\u0000/g, ""),
+          JSON.stringify({
+            ...ch,
+            _extracted_text: text,
+            _formula_warnings: formulaWarnings ?? null,
+          }).replace(/\\u0000/g, ""),
         ) as Record<string, unknown>;
         records.push({
           external_id: fileId,

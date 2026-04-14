@@ -10,6 +10,7 @@ import {
   chunksBySourceIds,
   searchOperationalEntities,
   listAllChunksByType,
+  enrichChunksWithFormulaWarnings,
   type ChunkSearchResult,
 } from "@/lib/db/queries/search";
 import { resolveEntities, getBoostSourceIds } from "@/lib/ai/entity-resolver";
@@ -255,6 +256,10 @@ export async function sendMessage(
       "fallback",
     );
   }
+
+  // Attach per-source formula-warnings for the admin debug panel. Cheap
+  // (single IN query) and only runs when chunks exist.
+  chunks = await enrichChunksWithFormulaWarnings(chunks);
 
   const entityContext =
     entities.length > 0
