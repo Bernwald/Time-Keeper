@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 import { deleteSource } from "@/app/actions";
 import { SourceLinks } from "./source-links";
 import { BackfillButton } from "./backfill-button";
+import { ProcessingProgress } from "./auto-refresh";
 import { card, badge, btn, page, styles } from "@/components/ui/table-classes";
 
 const TYPE_LABEL: Record<string, string> = { text: "Text", transcript: "Transkript", pdf: "PDF" };
@@ -100,6 +101,14 @@ export default async function SourceDetailPage({ params }: { params: Promise<{ i
         projects={projectOptions}
       />
 
+      {/* Processing progress — polls + shows progress bar while the embed
+          worker is still draining the queue. Renders nothing once ready. */}
+      <ProcessingProgress
+        status={source.status}
+        done={source.embed_jobs_done ?? 0}
+        total={source.embed_jobs_total ?? 0}
+      />
+
       {/* Chunks */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -112,6 +121,7 @@ export default async function SourceDetailPage({ params }: { params: Promise<{ i
             )}
             <span className="text-xs" style={styles.muted}>
               {chunks.length} {chunks.length === 1 ? "Abschnitt" : "Abschnitte"}
+              {source.status !== "ready" && source.status !== "error" && " (vorläufig)"}
             </span>
           </div>
         </div>

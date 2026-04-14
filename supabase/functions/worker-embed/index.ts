@@ -252,13 +252,24 @@ Deno.serve(async (req) => {
         .insert(rows);
       if (chunkErr) throw chunkErr;
 
-      // Embeddings persisted — flip the connector source to ready/success.
+      // Embeddings persisted. Increment the progress counter atomically
+      // and only flip status='ready'/sync_status='success' once ALL
+      // enqueued embed messages for this source have been processed.
+      // Otherwise multi-sheet xlsx uploads would flash "bereit" after the
+      // first sheet while DELETE+INSERT churn continues for later sheets.
       if (msg.source_id) {
-        await supabase
-          .from("sources")
-          .update({ status: "ready", sync_status: "success" })
-          .eq("id", sourceId)
-          .eq("organization_id", msg.organization_id);
+        const { data: progressRow, error: progressErr } = await supabase
+          .rpc("increment_embed_progress", { p_source_id: sourceId })
+          .single<{ done: number; total: number; is_complete: boolean }>();
+        if (progressErr) throw progressErr;
+
+        if (progressRow?.is_complete) {
+          await supabase
+            .from("sources")
+            .update({ status: "ready", sync_status: "success" })
+            .eq("id", sourceId)
+            .eq("organization_id", msg.organization_id);
+        }
       }
 
       await ack(QUEUE, m.msg_id);
