@@ -4,14 +4,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireOrgId } from "@/lib/db/org-context";
 import { createServiceClient } from "@/lib/db/supabase-server";
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
+import { getAppUrl } from "@/lib/app-url";
 
 export async function connectSharepoint(): Promise<void> {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const tenantId = process.env.MICROSOFT_TENANT_ID || "common";
   if (!clientId) throw new Error("MICROSOFT_CLIENT_ID not set");
-  const redirectUri = `${APP_URL}/auth/callback/sharepoint`;
+  const redirectUri = `${getAppUrl()}/auth/callback/sharepoint`;
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
@@ -27,7 +26,7 @@ export async function connectSharepoint(): Promise<void> {
 export async function connectGdrive(): Promise<void> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("GOOGLE_CLIENT_ID not set");
-  const redirectUri = `${APP_URL}/auth/callback/gdrive`;
+  const redirectUri = `${getAppUrl()}/auth/callback/gdrive`;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
+import { getAppUrl } from "@/lib/app-url";
 
 // ─── ASSISTANT CONFIG ──────────────────────────────────────────────────────
 
@@ -472,8 +473,7 @@ export async function disconnectCalendar() {
 
 export async function getGoogleOAuthUrl(): Promise<string> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-  const redirectUri = `${appUrl}/telefon-assistent/kalender/callback`;
+  const redirectUri = `${getAppUrl()}/telefon-assistent/kalender/callback`;
 
   const params = new URLSearchParams({
     client_id: clientId || "",
@@ -490,8 +490,7 @@ export async function getGoogleOAuthUrl(): Promise<string> {
 export async function exchangeGoogleCode(code: string): Promise<{ ok: boolean; error?: string }> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-  const redirectUri = `${appUrl}/telefon-assistent/kalender/callback`;
+  const redirectUri = `${getAppUrl()}/telefon-assistent/kalender/callback`;
 
   if (!clientId || !clientSecret) {
     return { ok: false, error: `Google OAuth nicht konfiguriert. Client ID: ${clientId ? "gesetzt" : "FEHLT"}, Client Secret: ${clientSecret ? "gesetzt" : "FEHLT"}` };

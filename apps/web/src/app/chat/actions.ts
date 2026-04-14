@@ -77,6 +77,17 @@ function dedupeChunks(chunks: ChunkSearchResult[]): ChunkSearchResult[] {
   return out;
 }
 
+// Attach a diagnostic `retrieved_via` tag to each chunk so the admin debug
+// panel can show which retrieval arm surfaced it. Kept separate from the
+// SQL layer because several retrievers are called from JS, not from within
+// a single RPC.
+function tagChunks(
+  chunks: ChunkSearchResult[],
+  via: NonNullable<ChunkSearchResult["retrieved_via"]>,
+): ChunkSearchResult[] {
+  return chunks.map((c) => ({ ...c, retrieved_via: c.retrieved_via ?? via }));
+}
+
 // ── Conversations ────────────────────────────────────────────────────────
 
 export async function createConversation(): Promise<string> {
@@ -230,11 +241,19 @@ export async function sendMessage(
   ]);
 
   // Order matters: exhaustive first so the LLM sees the complete set,
-  // then semantically relevant extras.
-  let chunks = dedupeChunks([...exhaustive, ...opEntities, ...knowledgeChunks]);
+  // then semantically relevant extras. Tag each source so the debug panel
+  // can show which retrieval arm surfaced each chunk.
+  let chunks = dedupeChunks([
+    ...tagChunks(exhaustive, "listing"),
+    ...tagChunks(opEntities, "operational"),
+    ...tagChunks(knowledgeChunks, boostIds.length > 0 ? "boost" : "hybrid"),
+  ]);
 
   if (chunks.length === 0 && boostIds.length > 0) {
-    chunks = await chunksBySourceIds(boostIds, RETRIEVAL_LIMIT, userId);
+    chunks = tagChunks(
+      await chunksBySourceIds(boostIds, RETRIEVAL_LIMIT, userId),
+      "fallback",
+    );
   }
 
   const entityContext =

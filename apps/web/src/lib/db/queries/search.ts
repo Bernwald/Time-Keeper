@@ -10,6 +10,12 @@ export type ChunkSearchResult = {
   source_title: string;
   source_type: string;
   rank: number;
+  /**
+   * Diagnostic tag — which retrieval arm surfaced this chunk. Set by the
+   * caller during merge, not by the SQL functions. Used by the admin
+   * debug panel to show *why* a chunk is in the context window.
+   */
+  retrieved_via?: "hybrid" | "boost" | "operational" | "listing" | "fallback";
 };
 
 export async function fullTextSearch(query: string, limit = 10, userId?: string): Promise<ChunkSearchResult[]> {

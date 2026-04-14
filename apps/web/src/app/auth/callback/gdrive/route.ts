@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { saveGdriveTokens } from "@/app/quellen/actions";
+import { getAppUrl } from "@/lib/app-url";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback/gdrive`;
+  const redirectUri = `${getAppUrl()}/auth/callback/gdrive`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(new URL("/quellen?error=misconfigured", req.url));

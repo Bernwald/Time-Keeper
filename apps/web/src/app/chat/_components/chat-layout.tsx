@@ -17,6 +17,7 @@ export default function ChatLayout(props: {
   messages: StoredMessage[];
   conversations: ConversationListItem[];
   models: ModelOption[];
+  isAdmin?: boolean;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -67,6 +68,7 @@ export default function ChatLayout(props: {
           conversation={props.conversation}
           initialMessages={props.messages}
           models={props.models}
+          isAdmin={props.isAdmin ?? false}
           onOpenDrawer={() => setDrawerOpen(true)}
         />
       </main>
