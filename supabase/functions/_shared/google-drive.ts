@@ -285,7 +285,14 @@ function parseSheetGrid(
     const cells: Array<{ col: number; value: string }> = [];
 
     // Match each <c> cell.
-    const cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/gi;
+    //
+    // NOTE: the attribute group MUST be lazy (`[^>]*?`). A greedy `[^>]*`
+    // would swallow the `/` in self-closing `<c r="R48" s="27"/>` tags,
+    // so the `\/>` alternative never fires — instead the engine backtracks
+    // and matches `>...<\/c>` against the NEXT cell, shifting every
+    // following column by one. Google Sheets exports emit self-closing
+    // tags for empty cells, which is how this bug surfaces in practice.
+    const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi;
     let cellMatch: RegExpExecArray | null;
     while ((cellMatch = cellRe.exec(rowContent)) !== null) {
       const attrs = cellMatch[1];
