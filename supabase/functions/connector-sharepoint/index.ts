@@ -89,9 +89,14 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
         // Pre-extract text payload for text-like files. Binary files still
         // get a record (so they show up as 'sync_status=error' in the UI).
         let text: string | null = null;
+        let formulaWarnings: Record<string, number> | undefined;
         if (!item.deleted) {
           try {
-            text = await downloadDriveItemText(accessToken, item.id, item.file?.mimeType);
+            const extracted = await downloadDriveItemText(accessToken, item.id, item.file?.mimeType);
+            if (extracted) {
+              text = extracted.text;
+              formulaWarnings = extracted.formulaWarnings;
+            }
           } catch (err) {
             console.warn("[sharepoint] download failed:", item.id, err);
           }
@@ -99,7 +104,11 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
         records.push({
           external_id: item.id,
           entity_type: "drive_item",
-          payload: { ...item, _extracted_text: text } as Record<string, unknown>,
+          payload: {
+            ...item,
+            _extracted_text: text,
+            _formula_warnings: formulaWarnings ?? null,
+          } as Record<string, unknown>,
         });
       }
       return records;

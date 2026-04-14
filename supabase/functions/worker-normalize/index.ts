@@ -86,6 +86,13 @@ async function normalizeDriveItem(
     return;
   }
 
+  // Propagate xlsx formula-warnings (cells with <f> but no cached <v>) into
+  // sources.metadata so the chat debug panel can surface a per-source badge.
+  // Always set the key — even empty — so a re-ingested, now-healthy file
+  // clears the previous warning instead of carrying it forward.
+  const formulaWarnings =
+    (payload._formula_warnings as Record<string, number> | null | undefined) ?? {};
+
   const connectorType = msg.provider_id === "sharepoint" ? "sharepoint" : "gdrive";
   const { data: upsert, error } = await supabase.rpc("upsert_connector_source", {
     p_org_id: msg.organization_id,
@@ -95,7 +102,11 @@ async function normalizeDriveItem(
     p_etag: etag,
     p_mime_type: mimeType,
     p_source_url: sourceUrl,
-    p_metadata: { provider: msg.provider_id, run_id: msg.run_id },
+    p_metadata: {
+      provider: msg.provider_id,
+      run_id: msg.run_id,
+      formula_warnings: formulaWarnings,
+    },
   });
   if (error) throw error;
 

@@ -4,7 +4,7 @@
 // refresh token, expose helpers for delta sync + file download + writeback.
 
 import { getMicrosoftCredsForOrg } from "./integration-registry.ts";
-import { extractOoxmlText } from "./google-drive.ts";
+import { extractOoxmlText, type ExtractedContent } from "./google-drive.ts";
 
 const GRAPH_API = "https://graph.microsoft.com/v1.0";
 
@@ -111,7 +111,7 @@ export async function downloadDriveItemText(
   accessToken: string,
   itemId: string,
   mimeType?: string,
-): Promise<string | null> {
+): Promise<ExtractedContent | null> {
   // OOXML office files — download bytes and extract via shared helper.
   if (mimeType && OOXML_MIMES.has(mimeType)) {
     const res = await fetch(`${GRAPH_API}/me/drive/items/${itemId}/content`, {
@@ -147,7 +147,7 @@ export async function downloadDriveItemText(
     console.error("[graph] downloadDriveItem:", res.status);
     return null;
   }
-  return await res.text();
+  return { text: await res.text() };
 }
 
 export async function patchDriveItem(
