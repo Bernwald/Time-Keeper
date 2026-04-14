@@ -637,6 +637,14 @@ function segmentsToStructured(sheetName: string, segments: TableSegment[]): stri
       lines.push(`### Zeile ${record.originRow} — ${record.title}`);
       // Pipe-separated single line keeps records compact (more per chunk)
       // while still pairing each value with its header token for FTS.
+      // We tried one-field-per-line for cleaner LLM extraction, but it
+      // shifted FTS rank density (the cover-density score drops when
+      // matched terms spread across many lines), pushing the right chunk
+      // out of the top-30 FTS pool — so questions like
+      // "Wie viele kostenlose Lizenzen hatte Biofach Vivaness 2025?"
+      // started returning "keine Informationen" even though the data
+      // was in a chunk. Pipe format keeps both retrieval AND extraction
+      // working.
       lines.push(
         record.fields
           .map((f) => `${f.header}: ${f.value}`)
