@@ -1,0 +1,98 @@
+<!--
+  Supabase Auth Template: Magic Link
+  Subject (im Dashboard setzen): Ihr Anmelde-Link für TimeKeeper
+  Variables: {{ .ConfirmationURL }} · {{ .Email }} · {{ .Token }}
+-->
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Anmelde-Link</title>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        body, .bg { background: #0c0f17 !important; }
+        .panel { background: #1a1f2e !important; border-color: #1e2435 !important; }
+        .text { color: #f1f5f9 !important; }
+        .muted { color: #94a3b8 !important; }
+        .divider { background: #1e2435 !important; }
+        .btn { background: #14b8a6 !important; }
+      }
+      @media only screen and (max-width: 600px) {
+        .container { width: 100% !important; padding: 16px !important; }
+        .panel { padding: 24px !important; }
+        .btn { display: block !important; }
+      }
+    </style>
+  </head>
+  <body class="bg" style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="bg" style="background:#f8fafc;padding:32px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;">
+            <!-- Logo -->
+            <tr>
+              <td align="center" style="padding:0 0 24px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="background:#0d9488;border-radius:12px;width:48px;height:48px;text-align:center;vertical-align:middle;">
+                      <span style="color:#ffffff;font-size:18px;font-weight:700;line-height:48px;letter-spacing:0.5px;">TK</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Panel -->
+            <tr>
+              <td class="panel" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:40px;">
+                <h1 class="text" style="margin:0 0 12px 0;color:#0f172a;font-size:22px;font-weight:600;line-height:1.3;">
+                  Ihr Anmelde-Link für TimeKeeper
+                </h1>
+                <p class="muted" style="margin:0 0 24px 0;color:#64748b;font-size:15px;line-height:1.6;">
+                  Klicken Sie auf den Button, um sich einzuloggen. Der Link ist <strong>60 Minuten</strong> gültig und kann nur einmal verwendet werden.
+                </p>
+
+                <!-- CTA -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;">
+                  <tr>
+                    <td style="border-radius:10px;background:#0d9488;" class="btn">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
+                        Jetzt anmelden
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <p class="muted" style="margin:0 0 8px 0;color:#64748b;font-size:13px;line-height:1.6;">
+                  Falls der Button nicht funktioniert, kopieren Sie diese URL in Ihren Browser:
+                </p>
+                <p style="margin:0 0 24px 0;font-size:12px;line-height:1.5;word-break:break-all;">
+                  <a href="{{ .ConfirmationURL }}" style="color:#0d9488;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                </p>
+
+                <div class="divider" style="height:1px;background:#e2e8f0;margin:24px 0;"></div>
+
+                <p class="muted" style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
+                  Sie haben keine Anmeldung angefordert? Ignorieren Sie diese E-Mail — ohne Klick auf den Link passiert nichts.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="padding:24px 16px 0 16px;">
+                <p class="muted" style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6;">
+                  TimeKeeper · AI Foundation Platform<br />
+                  Gesendet an {{ .Email }}
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

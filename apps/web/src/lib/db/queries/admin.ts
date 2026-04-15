@@ -48,7 +48,10 @@ export async function getAdminStats(): Promise<AdminStats> {
   const db = createServiceClient();
 
   const [orgs, users, sources] = await Promise.all([
-    db.from("organizations").select("id", { count: "exact", head: true }),
+    db
+      .from("organizations")
+      .select("id", { count: "exact", head: true })
+      .eq("is_platform", false),
     db.from("profiles").select("id", { count: "exact", head: true }),
     db.from("sources").select("id", { count: "exact", head: true }),
   ]);
@@ -66,6 +69,7 @@ export async function listOrganizations(): Promise<AdminOrg[]> {
   const { data: orgs, error } = await db
     .from("organizations")
     .select("*")
+    .eq("is_platform", false)
     .order("created_at", { ascending: false });
 
   if (error || !orgs) return [];
@@ -86,6 +90,19 @@ export async function listOrganizations(): Promise<AdminOrg[]> {
     ...org,
     member_count: countMap.get(org.id) ?? 0,
   }));
+}
+
+export async function getPlatformOrganization(): Promise<AdminOrgDetail | null> {
+  const db = createServiceClient();
+  const { data: org } = await db
+    .from("organizations")
+    .select("id")
+    .eq("is_platform", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!org) return null;
+  return getOrganizationAdmin(org.id);
 }
 
 export async function getOrganizationAdmin(id: string): Promise<AdminOrgDetail | null> {
