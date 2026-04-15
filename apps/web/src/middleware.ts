@@ -35,6 +35,10 @@ export async function middleware(request: NextRequest) {
   // OAuth callback routes must always pass through, regardless of auth state
   const isOAuthCallback = pathname.startsWith("/auth/callback/");
 
+  // Logout route must always pass through — otherwise middleware redirects the
+  // POST to `/` before the handler can clear the session cookie.
+  const isLogout = pathname === "/auth/abmelden";
+
   // Not authenticated → redirect to login (except auth pages)
   if (!user && !pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
@@ -42,8 +46,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated but on auth pages → redirect to home (but never on OAuth callbacks)
-  if (user && pathname.startsWith("/auth") && !isOAuthCallback) {
+  // Authenticated but on auth pages → redirect to home (but never on OAuth
+  // callbacks or the logout handler).
+  if (user && pathname.startsWith("/auth") && !isOAuthCallback && !isLogout) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
