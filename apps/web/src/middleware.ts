@@ -25,11 +25,32 @@ export async function middleware(request: NextRequest) {
     },
   );
 
+  const { pathname, searchParams } = request.nextUrl;
+
+  // Magic-Link safety net: Supabase sometimes redirects with `?code=...` to
+  // the bare Site URL (e.g. `/?code=xxx`) instead of `/auth/callback?code=xxx`,
+  // depending on the Additional Redirect URLs config. Forward any `?code=`
+  // arriving outside the callback route to the handler so the session can be
+  // exchanged — otherwise the user lands on `/`, middleware sees no session
+  // yet, and bounces them to /auth/anmelden.
+  const hasOtpCode = searchParams.has("code");
+  const isCallbackPath =
+    pathname === "/auth/callback" || pathname.startsWith("/auth/callback/");
+  if (hasOtpCode && !isCallbackPath) {
+    const target = request.nextUrl.clone();
+    target.pathname = "/auth/callback";
+    // Preserve original destination as `next` so the callback can return users
+    // to where the deep-link pointed.
+    if (!searchParams.has("next") && pathname !== "/") {
+      target.searchParams.set("next", pathname);
+    }
+    return NextResponse.redirect(target);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isDedicated = process.env.INSTANCE_MODE === "dedicated";
 
   // OAuth callback routes must always pass through, regardless of auth state
