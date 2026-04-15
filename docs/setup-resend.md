@@ -57,9 +57,15 @@ Supabase Dashboard → **Authentication** → **URL Configuration**:
 
 - **Site URL**: `https://<produktions-domain>` (z. B. `https://time-keeper.vercel.app` oder deine Custom-Domain).
 - **Redirect URLs** (Whitelist, eine pro Zeile):
+  - `https://<produktions-domain>/auth/confirm`
   - `https://<produktions-domain>/auth/callback`
-  - `http://localhost:3000/auth/callback` (für lokale Tests)
-  - `https://*.vercel.app/auth/callback` (für Preview-Deploys — Wildcard)
+  - `http://localhost:3000/auth/confirm`
+  - `http://localhost:3000/auth/callback`
+  - `https://*.vercel.app/auth/confirm`
+  - `https://*.vercel.app/auth/callback`
+
+`/auth/confirm` ist die primäre Route für den Token-Hash-Flow (cross-device-sicher).
+`/auth/callback` bleibt als PKCE-Fallback.
 
 Ohne diese Whitelist verweigert Supabase den OTP-Callback.
 

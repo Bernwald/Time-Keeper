@@ -1,14 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/db/supabase-browser";
 
-export default function LoginPage() {
+const LINK_ERROR_MESSAGES: Record<string, string> = {
+  link_invalid:
+    "Der Anmelde-Link ist abgelaufen oder wurde bereits verwendet. Fordere unten einen neuen an.",
+  missing_code:
+    "Der Anmelde-Link war unvollständig. Fordere unten einen neuen an.",
+  missing_token:
+    "Der Anmelde-Link war unvollständig. Fordere unten einen neuen an.",
+};
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const urlErrorCode = searchParams.get("error");
+  const urlErrorReason = searchParams.get("reason");
+  const urlError = urlErrorCode
+    ? LINK_ERROR_MESSAGES[urlErrorCode] ??
+      "Anmeldung fehlgeschlagen. Fordere unten einen neuen Link an."
+    : null;
+
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+
+  const displayError = error ?? urlError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,7 +39,12 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // The branded email template links to `/auth/confirm?token_hash=…`,
+        // which does not need a client-side code_verifier — the link works
+        // across devices and browsers. `emailRedirectTo` is used as the
+        // fallback `redirect_to` if the dashboard template still points at
+        // `{{ .ConfirmationURL }}` (PKCE flow).
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     });
 
@@ -93,9 +118,17 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
+          {displayError && (
             <p className="text-sm" style={{ color: "var(--color-danger)" }}>
-              {error}
+              {displayError}
+              {urlErrorReason && !error ? (
+                <span
+                  className="block mt-1 text-xs"
+                  style={{ color: "var(--color-muted)" }}
+                >
+                  Details: {urlErrorReason}
+                </span>
+              ) : null}
             </p>
           )}
 
@@ -117,5 +150,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

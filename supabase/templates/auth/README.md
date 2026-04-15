@@ -13,12 +13,34 @@ Die HTML-Dateien in diesem Ordner sind **Referenz-Vorlagen** für die Supabase-A
 
 | Variable | Beispiel |
 |---|---|
-| `{{ .ConfirmationURL }}` | Vollständiger Klick-Link inkl. Token — **Haupt-CTA** |
-| `{{ .SiteURL }}` | Site-URL aus Supabase-Einstellungen |
+| `{{ .ConfirmationURL }}` | Vollständiger Klick-Link inkl. Token — **nicht nutzen** (PKCE, scheitert cross-device) |
+| `{{ .SiteURL }}` | Site-URL aus Supabase-Einstellungen — Basis für eigene Callback-URLs |
+| `{{ .TokenHash }}` | Hash des Tokens — **Haupt-CTA** via `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=<type>` |
 | `{{ .Email }}` | E-Mail-Adresse des Empfängers |
 | `{{ .Token }}` | 6-stelliger OTP-Code |
-| `{{ .TokenHash }}` | Hash des Tokens (für eigene Callback-URLs) |
 | `{{ .Data.full_name }}` | User-Metadata aus `signUp({ options: { data: ... } })` |
+
+### Warum `TokenHash` statt `ConfirmationURL`?
+
+`{{ .ConfirmationURL }}` führt über Supabases eigenen `/auth/v1/verify`-Endpoint
+und generiert einen **PKCE**-Code, den die App nur mit einem im Browser
+gespeicherten `code_verifier`-Cookie einlösen kann. Öffnet der User den
+Magic-Link auf einem anderen Gerät / im Mail-Client mit externem Browser /
+nach Cookie-Löschung, fehlt der `code_verifier` → Login scheitert stumm.
+
+`{{ .SiteURL }}/auth/confirm?token_hash=…&type=…` geht direkt an unsere
+`/auth/confirm`-Route, die `verifyOtp` auf dem Server aufruft — kein
+Client-State nötig, funktioniert cross-device.
+
+### Type-Parameter je Template
+
+| Template | `type=` |
+|---|---|
+| Magic Link | `magiclink` |
+| Invite User | `invite` |
+| Confirm Signup | `signup` |
+| Reset Password | `recovery` |
+| Change Email | `email_change` |
 
 ## Design-Konventionen
 

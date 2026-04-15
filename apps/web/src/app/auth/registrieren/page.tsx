@@ -20,7 +20,8 @@ export default function RegisterPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // See /auth/anmelden for why we prefer /auth/confirm over /auth/callback.
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
         data: fullName ? { full_name: fullName } : undefined,
       },
     });

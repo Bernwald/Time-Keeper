@@ -1,7 +1,7 @@
 <!--
   Supabase Auth Template: Confirm Signup
   Subject (im Dashboard setzen): Bestätigen Sie Ihr TimeKeeper-Konto
-  Variables: {{ .ConfirmationURL }} · {{ .Email }}
+  Variables: {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup · {{ .Email }}
 
   Hinweis: Im Magic-Link-Flow ist dieses Template meist nicht aktiv —
   Supabase versendet direkt den Magic Link. Wir pflegen es dennoch,
@@ -60,7 +60,7 @@
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px 0;">
                   <tr>
                     <td style="border-radius:10px;background:#0d9488;" class="btn">
-                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
+                      <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup" style="display:inline-block;padding:14px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
                         Konto bestätigen
                       </a>
                     </td>
@@ -71,7 +71,7 @@
                   Falls der Button nicht funktioniert:
                 </p>
                 <p style="margin:0 0 24px 0;font-size:12px;line-height:1.5;word-break:break-all;">
-                  <a href="{{ .ConfirmationURL }}" style="color:#0d9488;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup" style="color:#0d9488;text-decoration:underline;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup</a>
                 </p>
 
                 <div class="divider" style="height:1px;background:#e2e8f0;margin:24px 0;"></div>

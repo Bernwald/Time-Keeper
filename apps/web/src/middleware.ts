@@ -47,6 +47,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(target);
   }
 
+  // Same safety net for the token_hash flow (preferred over PKCE for magic
+  // links because it works across devices and browsers — no code_verifier
+  // required). Forward `?token_hash=...&type=...` to /auth/confirm.
+  const hasTokenHash = searchParams.has("token_hash");
+  const isConfirmPath = pathname === "/auth/confirm";
+  if (hasTokenHash && !isConfirmPath) {
+    const target = request.nextUrl.clone();
+    target.pathname = "/auth/confirm";
+    if (!searchParams.has("next") && pathname !== "/") {
+      target.searchParams.set("next", pathname);
+    }
+    return NextResponse.redirect(target);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -55,6 +69,12 @@ export async function middleware(request: NextRequest) {
 
   // OAuth callback routes must always pass through, regardless of auth state
   const isOAuthCallback = pathname.startsWith("/auth/callback/");
+
+  // Magic-link exchange routes must run even if the user is (still) logged in
+  // — e.g. reusing a link should not bounce them back to `/` before the token
+  // has been verified/rotated.
+  const isAuthExchange =
+    pathname === "/auth/callback" || pathname === "/auth/confirm";
 
   // Logout route must always pass through — otherwise middleware redirects the
   // POST to `/` before the handler can clear the session cookie.
@@ -68,8 +88,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // Authenticated but on auth pages → redirect to home (but never on OAuth
-  // callbacks or the logout handler).
-  if (user && pathname.startsWith("/auth") && !isOAuthCallback && !isLogout) {
+  // callbacks, magic-link exchanges, or the logout handler).
+  if (
+    user &&
+    pathname.startsWith("/auth") &&
+    !isOAuthCallback &&
+    !isAuthExchange &&
+    !isLogout
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
