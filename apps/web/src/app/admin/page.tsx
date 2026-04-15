@@ -1,18 +1,52 @@
-import { getAdminStats, listOrganizations } from "@/lib/db/queries/admin";
+import { getAdminStats, listOrganizations, getPlatformOrganization } from "@/lib/db/queries/admin";
 import Link from "next/link";
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboard() {
-  const [stats, orgs] = await Promise.all([getAdminStats(), listOrganizations()]);
+  const [stats, orgs, platformOrg] = await Promise.all([
+    getAdminStats(),
+    listOrganizations(),
+    getPlatformOrganization(),
+  ]);
 
   const recentOrgs = orgs.slice(0, 5);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Stats */}
+      {/* Mein Unternehmen */}
+      {platformOrg && (
+        <Link
+          href="/admin/mein-unternehmen"
+          className="rounded-xl p-5 flex items-center justify-between"
+          style={{
+            background: "var(--color-accent-soft)",
+            border: "1px solid var(--color-accent)",
+          }}
+        >
+          <div>
+            <p className="text-xs uppercase tracking-widest font-semibold" style={{ color: "var(--color-accent)" }}>
+              Mein Unternehmen
+            </p>
+            <p
+              className="text-lg font-semibold mt-1"
+              style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
+            >
+              {platformOrg.name}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--color-muted)" }}>
+              {platformOrg.members.length} Team-Mitglieder · Interne Plattform-Org
+            </p>
+          </div>
+          <span className="text-sm font-medium" style={{ color: "var(--color-accent)" }}>
+            Verwalten →
+          </span>
+        </Link>
+      )}
+
+      {/* Stats — nur Kunden */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard label="Organisationen" value={stats.orgCount} />
+        <StatCard label="Kunden-Organisationen" value={stats.orgCount} />
         <StatCard label="Benutzer" value={stats.userCount} />
         <StatCard label="Quellen" value={stats.sourceCount} />
       </div>
@@ -24,7 +58,7 @@ export default async function AdminDashboard() {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold" style={{ color: "var(--color-text)" }}>
-            Letzte Organisationen
+            Letzte Kunden
           </h2>
           <Link
             href="/admin/kunden"
@@ -37,7 +71,7 @@ export default async function AdminDashboard() {
 
         {recentOrgs.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-            Noch keine Organisationen vorhanden.
+            Noch keine Kunden vorhanden.
           </p>
         ) : (
           <ul className="flex flex-col gap-2">

@@ -4,6 +4,7 @@ import Link from "next/link";
 
 const adminNav = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/mein-unternehmen", label: "Mein Unternehmen" },
   { href: "/admin/kunden", label: "Kunden" },
   { href: "/admin/integrationen", label: "Integrationen" },
 ];
