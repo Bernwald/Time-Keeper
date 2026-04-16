@@ -14,8 +14,19 @@ export type ChunkSearchResult = {
    * Diagnostic tag — which retrieval arm surfaced this chunk. Set by the
    * caller during merge, not by the SQL functions. Used by the admin
    * debug panel to show *why* a chunk is in the context window.
+   *
+   * "entity_list" is a COMPLETE, tag/status-filtered list from the DB —
+   * the prompt treats it as exhaustive ("this is all of them"), whereas
+   * all other paths are treated as selections.
    */
-  retrieved_via?: "hybrid" | "boost" | "operational" | "listing" | "fallback" | "expansion";
+  retrieved_via?:
+    | "hybrid"
+    | "boost"
+    | "operational"
+    | "listing"
+    | "fallback"
+    | "expansion"
+    | "entity_list";
   /**
    * Per-sheet count of cells that carry an Excel formula without a cached
    * value (populated during xlsx ingest → sources.metadata.formula_warnings).
@@ -130,6 +141,108 @@ export async function boostedHybridSearch(
   });
   if (error) throw error;
   return (data ?? []) as ChunkSearchResult[];
+}
+
+// Direct entity retrieval: list contacts/companies/projects that carry any of
+// the given tags. Uses the `list_entities_by_tag` RPC which joins entity_tags
+// straight onto the entity tables (no detour via source_links / content_chunks).
+// This is the ONLY retrieval path that guarantees a COMPLETE, tag-filtered
+// result set — the hybrid/operational/listing paths all rank and crop.
+//
+// Used by the chat orchestrator when listing-intent + at least one tag-match
+// is detected. The caller tags the results with retrieved_via: "entity_list"
+// so the system prompt can treat them as an exhaustive list.
+export async function listEntitiesByTag(
+  tagIds: string[],
+  types: Array<"contact" | "company" | "project">,
+  limit = 200,
+): Promise<ChunkSearchResult[]> {
+  if (tagIds.length === 0 || types.length === 0) return [];
+
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+
+  const { data, error } = await db.rpc("list_entities_by_tag", {
+    p_org_id: orgId,
+    p_tag_ids: tagIds,
+    p_types: types,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as Array<{
+    entity_type: string;
+    entity_id: string;
+    display_name: string;
+    entity_status: string | null;
+    company_name: string | null;
+    matched_tag_names: string[];
+    chunk_text: string;
+  }>).map((row) => {
+    const title =
+      row.entity_type === "contact"
+        ? `Kontakt: ${row.display_name}`
+        : row.entity_type === "company"
+        ? `Firma: ${row.display_name}`
+        : `Projekt: ${row.display_name}`;
+    return {
+      id: `${row.entity_type}:${row.entity_id}`,
+      source_id: row.entity_id,
+      chunk_index: 0,
+      chunk_text: row.chunk_text,
+      source_title: title,
+      source_type: row.entity_type,
+      rank: 1,
+    };
+  });
+}
+
+// Status-driven sibling of listEntitiesByTag. Answers questions like
+// "alle aktiven Kunden" / "alle offenen Projekte". Status values are
+// compared case-sensitively against the entity-table `status` column.
+export async function listEntitiesByStatus(
+  types: Array<"contact" | "company" | "project">,
+  statuses: string[],
+  limit = 200,
+): Promise<ChunkSearchResult[]> {
+  if (types.length === 0 || statuses.length === 0) return [];
+
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+
+  const { data, error } = await db.rpc("list_entities_by_status", {
+    p_org_id: orgId,
+    p_types: types,
+    p_status: statuses,
+    p_limit: limit,
+  });
+  if (error) throw error;
+
+  return ((data ?? []) as Array<{
+    entity_type: string;
+    entity_id: string;
+    display_name: string;
+    entity_status: string | null;
+    company_name: string | null;
+    all_tag_names: string[];
+    chunk_text: string;
+  }>).map((row) => {
+    const title =
+      row.entity_type === "contact"
+        ? `Kontakt: ${row.display_name}`
+        : row.entity_type === "company"
+        ? `Firma: ${row.display_name}`
+        : `Projekt: ${row.display_name}`;
+    return {
+      id: `${row.entity_type}:${row.entity_id}`,
+      source_id: row.entity_id,
+      chunk_index: 0,
+      chunk_text: row.chunk_text,
+      source_title: title,
+      source_type: row.entity_type,
+      rank: 1,
+    };
+  });
 }
 
 // Search operational entity tables (companies/contacts/projects) via ILIKE.

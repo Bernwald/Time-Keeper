@@ -1,0 +1,100 @@
+{
+  "_doc": "Gold-Set fuer Chat-Retrieval. Lebende Dokumentation dessen, was das Retrieval erfuellen MUSS, bevor weitere Aenderungen grad werden. Keys: q = User-Frage. expect_retrieval_via = welcher Retrieval-Arm MUSS mindestens einmal in response.sources[].retrieved_via vorkommen. expect_min_entity_count = minimale Anzahl an entity_list-Treffern (0 = darf leer sein). expect_all_tagged = Tag-Name, den ALLE entity_list-Eintraege tragen muessen. expect_no_hallucination = bei 0-Treffer-Queries muss die Antwort 'Gefunden: 0 Eintraege' enthalten, nicht auf 2b ausweichen. expect_answer_contains = Substring, den die finale Antwort zwingend enthalten muss. Runner-Implementation ist Follow-up (vitest + Fixture-Supabase-Branch).",
+  "cases": [
+    {
+      "q": "gib mir alle Pilot-Kontakte",
+      "expect_retrieval_via": "entity_list",
+      "expect_min_entity_count": 1,
+      "expect_all_tagged": "Pilot"
+    },
+    {
+      "q": "welche Kontakte sind mit Pilot getaggt",
+      "expect_retrieval_via": "entity_list",
+      "expect_min_entity_count": 1,
+      "expect_all_tagged": "Pilot"
+    },
+    {
+      "q": "liste alle warmen Leads",
+      "expect_retrieval_via": "entity_list",
+      "expect_min_entity_count": 1,
+      "expect_all_tagged": "warm"
+    },
+    {
+      "q": "wie viele Pilot-Kunden haben wir",
+      "expect_retrieval_via": "entity_list",
+      "expect_answer_contains": "Gefunden:"
+    },
+    {
+      "q": "zeige alle Firmen mit Tag Enterprise",
+      "expect_retrieval_via": "entity_list",
+      "expect_all_tagged": "Enterprise"
+    },
+    {
+      "q": "alle Projekte die als Pilot getaggt sind",
+      "expect_retrieval_via": "entity_list",
+      "expect_all_tagged": "Pilot"
+    },
+    {
+      "q": "gib mir alle Kontakte",
+      "expect_retrieval_via": "listing"
+    },
+    {
+      "q": "welche Firmen haben wir",
+      "expect_retrieval_via": "listing"
+    },
+    {
+      "q": "welche Projekte laufen gerade",
+      "expect_retrieval_via": "listing"
+    },
+    {
+      "q": "wer ist der CTO bei BUERO-BEDARF Renner GmbH",
+      "expect_retrieval_via": "hybrid"
+    },
+    {
+      "q": "was wurde im Gespraech mit Jochen Renner besprochen",
+      "expect_retrieval_via": "hybrid"
+    },
+    {
+      "q": "welchen Status hat das Projekt Test",
+      "expect_retrieval_via": "hybrid"
+    },
+    {
+      "q": "was sind unsere Pilotkunden-Strategien",
+      "expect_retrieval_via": "hybrid",
+      "expect_answer_contains": "Thema"
+    },
+    {
+      "q": "wie gehen wir mit Bestandskunden um",
+      "expect_retrieval_via": "hybrid"
+    },
+    {
+      "q": "gib mir alle Unicorn-Kontakte",
+      "expect_retrieval_via": "entity_list",
+      "expect_min_entity_count": 0,
+      "expect_no_hallucination": true,
+      "expect_answer_contains": "Gefunden: 0"
+    },
+    {
+      "q": "wie viele Einhoerner gibt es im System",
+      "expect_retrieval_via": "entity_list",
+      "expect_min_entity_count": 0,
+      "expect_no_hallucination": true
+    },
+    {
+      "q": "wie hoch war der Umsatz mit Kunde Z im Q3",
+      "expect_answer_contains": "keine Informationen"
+    },
+    {
+      "q": "gib mir den Quellcode des Login-Flows",
+      "expect_answer_contains": "keine Informationen"
+    },
+    {
+      "q": "was hat der Kunde Jochen Renner gemacht",
+      "expect_retrieval_via": "hybrid"
+    },
+    {
+      "q": "liste alle Kontakte mit Status aktiv",
+      "expect_retrieval_via": "listing"
+    }
+  ]
+}

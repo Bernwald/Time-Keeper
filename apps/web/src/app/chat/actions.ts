@@ -10,6 +10,7 @@ import {
   chunksBySourceIds,
   searchOperationalEntities,
   listAllChunksByType,
+  listEntitiesByTag,
   enrichChunksWithFormulaWarnings,
   type ChunkSearchResult,
 } from "@/lib/db/queries/search";
@@ -68,13 +69,29 @@ function detectListingIntent(q: string): {
   if (!listing) return { isListing: false, types: [] };
 
   const types: string[] = [];
-  if (/kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|kunde|kunden/.test(s)) types.push("text");
+  // "text" covers the CRM-entity types (contact/company/project) in the
+  // listing/entity pipeline. Any noun that clearly points at one of these
+  // must add "text" here — otherwise the entity-first path stays dormant.
+  if (/kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|kunde|kunden|firma|firmen|unternehmen|projekt|projekte/.test(s)) types.push("text");
   if (/gespr(ä|ae)ch|transcript|meeting|call/.test(s)) types.push("transcript");
   if (/dokument|datei|pdf|doc/.test(s)) types.push("document");
   // Default: if the user asks "alle/welche" without a type → include short
   // entity-style sources (text) plus documents.
   if (types.length === 0) types.push("text", "document");
   return { isListing: true, types };
+}
+
+// Decide which of the three CRM entity tables an entity-first retrieval should
+// pull from, based on the noun(s) in the query. For "alle Kontakte" we only
+// want contacts; for "alle Kunden" we want both (colloquial). An empty array
+// means the entity-first path is skipped entirely.
+function entityTypesFromQuery(q: string): Array<"contact" | "company" | "project"> {
+  const s = q.toLowerCase();
+  const types: Array<"contact" | "company" | "project"> = [];
+  if (/kontakt|ansprech|lead|vertrieb|kunde|kunden|warm|kalt|lauwarm/.test(s)) types.push("contact");
+  if (/firma|firmen|unternehmen|kunde|kunden|account/.test(s)) types.push("company");
+  if (/projekt|projekte|auftrag|auftr(ä|ae)ge/.test(s)) types.push("project");
+  return Array.from(new Set(types));
 }
 
 // Fuse multiple ranked chunk lists via Reciprocal Rank Fusion.
@@ -278,6 +295,25 @@ export async function sendMessage(
 
   const listing = detectListingIntent(trimmed);
 
+  // Entity-first retrieval: when the user asks for a LIST of CRM entities
+  // AND at least one tag in the query matches an org tag, we bypass hybrid
+  // ranking entirely and pull the matching rows straight from the DB via
+  // list_entities_by_tag. That guarantees a COMPLETE, exactly-filtered
+  // result set — the hybrid/operational/listing paths all rank and crop, so
+  // they silently drop entities at scale.
+  //
+  // When entity-first fires, its result gets tagged "entity_list" and the
+  // system prompt treats it as exhaustive. See lib/ai/chat.ts BASE_RULES.
+  const entityTypes = listing.isListing ? entityTypesFromQuery(trimmed) : [];
+  const entityList: ChunkSearchResult[] =
+    listing.isListing && matchingTags.length > 0 && entityTypes.length > 0
+      ? await listEntitiesByTag(
+          matchingTags.map((t) => t.id),
+          entityTypes,
+          LISTING_LIMIT,
+        )
+      : [];
+
   // For listing/counting questions we MUST bypass relevance ranking,
   // otherwise a long transcript can crowd out short entity sources
   // (e.g. 1 transcript source produces more chunks than 8 contact sources,
@@ -307,10 +343,13 @@ export async function sendMessage(
       ? "boost"
       : "hybrid";
 
-  // Order matters: exhaustive first so the LLM sees the complete set,
-  // then semantically relevant extras. Tag each source so the debug panel
-  // can show which retrieval arm surfaced each chunk.
+  // Order matters: entity_list first (it's a COMPLETE filtered list from the
+  // DB — the LLM must see it before any ranked/cropped chunks), then
+  // exhaustive type-dump, then operational pseudo-chunks, then semantic
+  // extras. Tag each source so the debug panel can show which retrieval arm
+  // surfaced each chunk.
   let chunks = dedupeChunks([
+    ...tagChunks(entityList, "entity_list"),
     ...tagChunks(exhaustive, "listing"),
     ...tagChunks(opEntities, "operational"),
     ...tagChunks(knowledgeChunks, knowledgeVia),
