@@ -236,6 +236,7 @@ export async function sendMessage(
   question: string,
   model: ModelId = "claude",
 ): Promise<ChatResponse> {
+  const startedAt = Date.now();
   const orgId = await requireOrgId();
   const db = await createUserClient();
   const trimmed = question.trim();
@@ -390,7 +391,26 @@ export async function sendMessage(
     model,
   });
 
-  // 6. Persist assistant message
+  // 6. Telemetry — persist retrieval signals alongside the assistant message
+  //    so Admins can reconstruct the retrieval path later. Histogram of
+  //    retrieved_via arms is directly derivable from the tags tagChunks()
+  //    attached above.
+  const retrievalArms: Record<string, number> = {};
+  for (const c of chunks) {
+    const arm = c.retrieved_via ?? "unknown";
+    retrievalArms[arm] = (retrievalArms[arm] ?? 0) + 1;
+  }
+  const chunkIds = chunks.map((c) => c.id);
+  const latencyMs = Date.now() - startedAt;
+  const telemetry = {
+    chunk_ids: chunkIds,
+    retrieval_arms: retrievalArms,
+    boost_source_ids: boostIds,
+    latency_ms: latencyMs,
+    chunks_retrieved: chunks.length,
+  };
+
+  // 7. Persist assistant message
   if (response.type === "answer") {
     await db.from("chat_messages").insert({
       conversation_id: conversationId,
@@ -401,6 +421,7 @@ export async function sendMessage(
       model: response.model,
       entity_context: entityContext ?? null,
       rewritten_query: response.rewrittenQuery ?? null,
+      ...telemetry,
     });
   } else {
     // chunks-only fallback (LLM unavailable) — store as a system note
@@ -413,10 +434,11 @@ export async function sendMessage(
       model,
       entity_context: entityContext ?? null,
       rewritten_query: searchQuery !== trimmed ? searchQuery : null,
+      ...telemetry,
     });
   }
 
-  // 7. Auto-title on first turn
+  // 8. Auto-title on first turn
   if (allHistory.length === 0) {
     const title = await generateChatTitle(trimmed);
     await db

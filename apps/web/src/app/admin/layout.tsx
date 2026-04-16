@@ -7,6 +7,7 @@ const adminNav = [
   { href: "/admin/mein-unternehmen", label: "Mein Unternehmen" },
   { href: "/admin/kunden", label: "Kunden" },
   { href: "/admin/integrationen", label: "Integrationen" },
+  { href: "/admin/retrieval-qualitaet", label: "Retrieval-Qualität" },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
