@@ -331,7 +331,10 @@ export async function sendMessage(
     Promise.all(variants.map(runHybrid)),
     searchOperationalEntities(searchQuery, 100, listing.isListing ? "exhaustive" : "search"),
     listing.isListing
-      ? listAllChunksByType(listing.types, LISTING_LIMIT, userId)
+      // Empty types array = all source_types. Every Drive/SharePoint ingest
+      // lands as source_type="connector", so filtering by a technical type
+      // silently drops the real content for listing questions.
+      ? listAllChunksByType([], LISTING_LIMIT, userId)
       : Promise.resolve([] as ChunkSearchResult[]),
   ]);
 

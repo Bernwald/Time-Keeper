@@ -418,12 +418,17 @@ export async function searchOperationalEntities(
 // Used for LISTING questions ("alle Kontakte", "wie viele warme ...") where
 // relevance ranking would otherwise drop short entity-sources behind a single
 // long transcript. Returns up to `limit` chunks, newest source first.
+//
+// sourceTypes = [] means "all types". In practice every connector-ingested
+// Drive / SharePoint file lands with source_type="connector", so filtering
+// by a technical type drops the real content (tables, notes, transcripts).
+// The list-intent path therefore passes an empty array and we pull newest-
+// first without a type filter.
 export async function listAllChunksByType(
   sourceTypes: string[],
   limit = 80,
   userId?: string,
 ): Promise<ChunkSearchResult[]> {
-  if (sourceTypes.length === 0) return [];
   const orgId = await requireOrgId();
   const db = await createUserClient();
 
@@ -431,9 +436,12 @@ export async function listAllChunksByType(
     .from("sources")
     .select("id, title, source_type, folder_id, created_at, content_chunks(id, chunk_index, chunk_text)")
     .eq("organization_id", orgId)
-    .in("source_type", sourceTypes)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (sourceTypes.length > 0) {
+    query = query.in("source_type", sourceTypes);
+  }
 
   // Permission filtering: if userId provided, fetch accessible folder IDs
   // and filter sources to those without folder or in accessible folders
@@ -455,9 +463,18 @@ export async function listAllChunksByType(
 
   const { data } = await query;
 
+  // Cap chunks per source so one big spreadsheet (hundreds of chunks) can't
+  // starve the listing — we want breadth across sources, not depth in one.
+  // chunk_index 0 carries the header/first rows of tabular data, which is
+  // the most informative snippet for list-style answers.
+  const MAX_CHUNKS_PER_SOURCE = 2;
+
   const out: ChunkSearchResult[] = [];
   for (const s of (data ?? []) as any[]) {
-    for (const c of (s.content_chunks ?? []) as any[]) {
+    const chunks = ((s.content_chunks ?? []) as any[])
+      .sort((a, b) => (a.chunk_index ?? 0) - (b.chunk_index ?? 0))
+      .slice(0, MAX_CHUNKS_PER_SOURCE);
+    for (const c of chunks) {
       out.push({
         id: c.id,
         source_id: s.id,
