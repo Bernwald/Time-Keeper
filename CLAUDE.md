@@ -45,22 +45,17 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 
 ### Entwicklung (Claude führt aus)
 
-1. Feature-Branch erstellen: `git checkout -b feature/beschreibung`
-2. Code schreiben + ändern
-3. Qualitätsprüfung (Pflicht vor jedem Push):
+1. Code schreiben + ändern
+2. Qualitätsprüfung (Pflicht vor jedem Push):
    - `npm run typecheck --workspace apps/web`
    - `npm run lint --workspace apps/web`
    - Bei größeren Änderungen: `npm run build --workspace apps/web`
    - Bei UI-Änderungen: Dev-Server starten + Preview-Tools für visuelle Prüfung
-4. Commit + Push auf Feature-Branch
-5. Vercel Preview-URL an User melden
-6. User testet Preview → gibt Freigabe oder Feedback
-
-### Produktion (User entscheidet)
-
-- User merged PR in `main` → Vercel Production Deploy
-- `supabase db push` — nur nach User-Freigabe
-- `supabase functions deploy` — nur nach User-Freigabe
+   - Security check
+3. Commit + Push auf Main
+4. supabase db push
+4. Vercel Preview-URL an User melden
+5. User testet Preview → gibt Freigabe oder Feedback
 
 ## Sprachrichtlinie
 
