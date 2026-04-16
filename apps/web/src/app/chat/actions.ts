@@ -13,10 +13,16 @@ import {
   enrichChunksWithFormulaWarnings,
   type ChunkSearchResult,
 } from "@/lib/db/queries/search";
-import { resolveEntities, getBoostSourceIds } from "@/lib/ai/entity-resolver";
+import {
+  resolveEntities,
+  getBoostSourceIds,
+  findMatchingTags,
+  getSourceIdsForTags,
+} from "@/lib/ai/entity-resolver";
 import {
   generateAnswer,
   rewriteFollowUpQuery,
+  expandQuery,
   generateChatTitle,
   availableModels,
   type ChatResponse,
@@ -47,6 +53,11 @@ const HISTORY_WINDOW  = 10; // last N turns sent to the model
 // Detects listing/counting questions where we must bypass relevance ranking
 // and fetch every matching row, otherwise long transcripts crowd out short
 // entity-sources and we silently drop contacts/companies.
+//
+// NOTE: "kunde/kunden" also counts as a contact-trigger — in colloquial German
+// people call CRM contacts "Kunden". Previously this only mapped to companies,
+// which caused "alle Pilot Kunden" to return zero contacts even though the
+// user meant contact rows.
 function detectListingIntent(q: string): {
   isListing: boolean;
   types: string[];
@@ -57,13 +68,36 @@ function detectListingIntent(q: string): {
   if (!listing) return { isListing: false, types: [] };
 
   const types: string[] = [];
-  if (/kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm/.test(s)) types.push("text");
+  if (/kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|kunde|kunden/.test(s)) types.push("text");
   if (/gespr(ä|ae)ch|transcript|meeting|call/.test(s)) types.push("transcript");
   if (/dokument|datei|pdf|doc/.test(s)) types.push("document");
   // Default: if the user asks "alle/welche" without a type → include short
   // entity-style sources (text) plus documents.
   if (types.length === 0) types.push("text", "document");
   return { isListing: true, types };
+}
+
+// Fuse multiple ranked chunk lists via Reciprocal Rank Fusion.
+// Each chunk gets score = sum over all lists of 1 / (k + rank_in_list).
+// Stable under missing entries (a chunk absent from a list contributes 0).
+// k = 60 follows the standard RRF recommendation.
+function fuseRRF(
+  lists: ChunkSearchResult[][],
+  k = 60,
+): ChunkSearchResult[] {
+  const scoreById = new Map<string, number>();
+  const chunkById = new Map<string, ChunkSearchResult>();
+  for (const list of lists) {
+    list.forEach((chunk, idx) => {
+      const key = chunk.id;
+      const score = 1 / (k + idx + 1);
+      scoreById.set(key, (scoreById.get(key) ?? 0) + score);
+      if (!chunkById.has(key)) chunkById.set(key, chunk);
+    });
+  }
+  return [...chunkById.entries()]
+    .map(([id, chunk]) => ({ ...chunk, rank: scoreById.get(id) ?? 0 }))
+    .sort((a, b) => b.rank - a.rank);
 }
 
 function dedupeChunks(chunks: ChunkSearchResult[]): ChunkSearchResult[] {
@@ -221,9 +255,26 @@ export async function sendMessage(
 
   const searchQuery = await rewriteFollowUpQuery(trimmed, history);
 
-  // 4. Entity-aware retrieval
-  const entities = await resolveEntities(searchQuery);
-  const boostIds = await getBoostSourceIds(entities);
+  // 4. Query expansion — generate 2-3 paraphrases so the hybrid retrieval
+  //    isn't at the mercy of exact wording (compound words, synonyms, register).
+  //    Always includes the original searchQuery as variants[0]; degrades to
+  //    a single-variant run if expansion is unavailable.
+  const variants = await expandQuery(searchQuery);
+
+  // 5. Entity-aware retrieval — union of
+  //    (a) sources linked to named entities in the query
+  //    (b) sources whose linked entity carries a tag matching the query
+  //    Tag matching lets "Pilot Kunden" boost all contacts tagged "Pilot"
+  //    without the user knowing the exact entity name.
+  const [entities, matchingTags] = await Promise.all([
+    resolveEntities(searchQuery),
+    findMatchingTags(searchQuery),
+  ]);
+  const [entityBoostIds, tagBoostIds] = await Promise.all([
+    getBoostSourceIds(entities),
+    getSourceIdsForTags(matchingTags.map((t) => t.id)),
+  ]);
+  const boostIds = Array.from(new Set([...entityBoostIds, ...tagBoostIds]));
 
   const listing = detectListingIntent(trimmed);
 
@@ -231,15 +282,30 @@ export async function sendMessage(
   // otherwise a long transcript can crowd out short entity sources
   // (e.g. 1 transcript source produces more chunks than 8 contact sources,
   //  so hybrid ranking leaves some contacts out of the context window).
-  const [knowledgeChunks, opEntities, exhaustive] = await Promise.all([
+  //
+  // Run hybrid_search once per variant in parallel and RRF-fuse the results —
+  // cheap because hybrid_search is a single RPC call per variant and we cap
+  // variants at 4 in expandQuery.
+  const runHybrid = (q: string) =>
     boostIds.length > 0
-      ? boostedHybridSearch(searchQuery, boostIds, RETRIEVAL_LIMIT, userId)
-      : hybridSearch(searchQuery, RETRIEVAL_LIMIT, userId),
+      ? boostedHybridSearch(q, boostIds, RETRIEVAL_LIMIT, userId)
+      : hybridSearch(q, RETRIEVAL_LIMIT, userId);
+
+  const [variantResults, opEntities, exhaustive] = await Promise.all([
+    Promise.all(variants.map(runHybrid)),
     searchOperationalEntities(searchQuery, 100, listing.isListing ? "exhaustive" : "search"),
     listing.isListing
       ? listAllChunksByType(listing.types, LISTING_LIMIT, userId)
       : Promise.resolve([] as ChunkSearchResult[]),
   ]);
+
+  const knowledgeChunks = fuseRRF(variantResults).slice(0, RETRIEVAL_LIMIT);
+  const knowledgeVia: NonNullable<ChunkSearchResult["retrieved_via"]> =
+    variants.length > 1
+      ? "expansion"
+      : boostIds.length > 0
+      ? "boost"
+      : "hybrid";
 
   // Order matters: exhaustive first so the LLM sees the complete set,
   // then semantically relevant extras. Tag each source so the debug panel
@@ -247,7 +313,7 @@ export async function sendMessage(
   let chunks = dedupeChunks([
     ...tagChunks(exhaustive, "listing"),
     ...tagChunks(opEntities, "operational"),
-    ...tagChunks(knowledgeChunks, boostIds.length > 0 ? "boost" : "hybrid"),
+    ...tagChunks(knowledgeChunks, knowledgeVia),
   ]);
 
   if (chunks.length === 0 && boostIds.length > 0) {
@@ -261,10 +327,16 @@ export async function sendMessage(
   // (single IN query) and only runs when chunks exist.
   chunks = await enrichChunksWithFormulaWarnings(chunks);
 
-  const entityContext =
-    entities.length > 0
-      ? entities.map((e) => `${e.name} (${e.type})`).join(", ")
-      : undefined;
+  const entityParts: string[] = [];
+  if (entities.length > 0) {
+    entityParts.push(entities.map((e) => `${e.name} (${e.type})`).join(", "));
+  }
+  if (matchingTags.length > 0) {
+    entityParts.push(
+      `Tags: ${matchingTags.map((t) => t.name).join(", ")}`,
+    );
+  }
+  const entityContext = entityParts.length > 0 ? entityParts.join(" · ") : undefined;
 
   // 5. Generate answer (multi-turn, with system prompt)
   const response = await generateAnswer({

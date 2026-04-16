@@ -151,6 +151,97 @@ export async function rewriteFollowUpQuery(
   }
 }
 
+/**
+ * Expand a user question into 2-4 semantically equivalent paraphrases so the
+ * retrieval arms are not at the mercy of the exact wording.
+ *
+ * Motivation: German compound words ("Pilotkontakte") never match two-word
+ * queries ("Pilot Kunden") on the FTS arm, and vector similarity varies
+ * enough between phrasings that the top-K can diverge. Generating variants
+ * up-front and fusing the retrieval results per RRF closes that gap without
+ * DB changes.
+ *
+ * Returns the original question as the first element of the array. On any
+ * failure (no key, parse error, timeout) returns `[question]` — retrieval
+ * still works, just without expansion.
+ */
+const EXPANSION_CACHE = new Map<string, { at: number; variants: string[] }>();
+const EXPANSION_TTL_MS = 5 * 60 * 1000;
+
+export async function expandQuery(question: string): Promise<string[]> {
+  const trimmed = question.trim();
+  if (!trimmed) return [];
+
+  const cacheKey = trimmed.toLowerCase();
+  const cached = EXPANSION_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.at < EXPANSION_TTL_MS) {
+    return cached.variants;
+  }
+
+  const fallback = [trimmed];
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return fallback;
+
+  try {
+    const { Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic({ apiKey });
+
+    const message = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: `Formuliere die folgende Frage in 3 semantisch gleichwertigen Varianten um. Ziel: ein RAG-System soll die Frage unabhaengig von der Wortwahl des Nutzers finden. Beruecksichtige:
+- Synonyme und Umgangssprache (z. B. "Kunde" <-> "Kontakt", "Auftrag" <-> "Projekt")
+- Deutsche Compound-Woerter vs. Mehrwortvarianten (z. B. "Pilotkontakte" <-> "Pilot Kunden" <-> "Pilot-Ansprechpartner")
+- Formale vs. informale Sprache
+- Singular/Plural
+
+Antworte NUR als JSON-Array mit exakt 3 Strings, ohne Markdown, ohne Kommentare, ohne Einleitung.
+
+Frage: "${trimmed}"`,
+        },
+      ],
+    });
+
+    const text = message.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("")
+      .trim();
+
+    // Accept either a clean JSON array or one wrapped in ```json fences.
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return fallback;
+
+    const parsed: unknown = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(parsed)) return fallback;
+
+    const variants = parsed
+      .filter((v): v is string => typeof v === "string")
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0 && v.length < 500);
+
+    // Always include the original first; dedupe case-insensitively.
+    const seen = new Set<string>([trimmed.toLowerCase()]);
+    const out = [trimmed];
+    for (const v of variants) {
+      const key = v.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+      if (out.length >= 4) break;
+    }
+
+    EXPANSION_CACHE.set(cacheKey, { at: Date.now(), variants: out });
+    return out;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function generateChatTitle(firstQuestion: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return firstQuestion.slice(0, 60);

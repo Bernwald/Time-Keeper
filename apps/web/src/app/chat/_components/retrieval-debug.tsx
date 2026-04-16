@@ -32,6 +32,7 @@ function totalFormulaWarnings(fw: Record<string, number> | undefined): number {
 
 const VIA_LABEL: Record<string, string> = {
   hybrid: "Hybrid (FTS+Vec+Trgm)",
+  expansion: "Expansion (Multi-Query)",
   boost: "Boosted",
   operational: "CRM-Tabelle",
   listing: "Listing",
@@ -46,6 +47,8 @@ function viaColor(via: string | undefined): string {
       return "#7c3aed"; // violet
     case "boost":
       return "#f59e0b"; // amber
+    case "expansion":
+      return "#0ea5e9"; // sky
     case "fallback":
       return "#6b7280"; // gray
     case "hybrid":

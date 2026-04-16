@@ -15,7 +15,7 @@ export type ChunkSearchResult = {
    * caller during merge, not by the SQL functions. Used by the admin
    * debug panel to show *why* a chunk is in the context window.
    */
-  retrieved_via?: "hybrid" | "boost" | "operational" | "listing" | "fallback";
+  retrieved_via?: "hybrid" | "boost" | "operational" | "listing" | "fallback" | "expansion";
   /**
    * Per-sheet count of cells that carry an Excel formula without a cached
    * value (populated during xlsx ingest → sources.metadata.formula_warnings).
@@ -151,11 +151,21 @@ export async function searchOperationalEntities(
   // For listing-questions ("alle Kontakte", "vertriebskontakte") we want to
   // return everything, not just name-matches. In exhaustive mode (caller knows
   // it's a listing) we return all rows of all three types.
+  //
+  // "kunde/kunden" triggers BOTH contacts and companies — in colloquial German
+  // "Kunde" can mean either the company or the human contact at that company.
+  // Previously "alle Pilot Kunden" only pulled companies, missing the contact
+  // rows that actually carried the "Pilot" tag.
   const lower = trimmed.toLowerCase();
+  const hasCustomerTerm = /kunde|kunden|account/i.test(lower);
   const wantsAllContacts =
-    mode === "exhaustive" || /kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|hot|cold/i.test(lower);
+    mode === "exhaustive" ||
+    hasCustomerTerm ||
+    /kontakt|vertrieb|ansprech|lead|warm|kalt|lauwarm|hot|cold/i.test(lower);
   const wantsAllCompanies =
-    mode === "exhaustive" || /firma|unternehmen|kunde|account/i.test(lower);
+    mode === "exhaustive" ||
+    hasCustomerTerm ||
+    /firma|unternehmen/i.test(lower);
   const wantsAllProjects =
     mode === "exhaustive" || /projekt/i.test(lower);
 
