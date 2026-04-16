@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { isPlatformAdmin } from "@/lib/db/queries/organization";
-import { createServiceClient, getUser } from "@/lib/db/supabase-server";
+import {
+  createServiceClient,
+  createUserClient,
+  getUser,
+} from "@/lib/db/supabase-server";
 
 export type Verdict = "correct" | "partial" | "hallucination" | "empty";
 export type RootCause =
@@ -230,7 +234,11 @@ export async function getQualityTotals(
   organizationId: string | null = null,
 ): Promise<RetrievalQualityTotals> {
   await requireAdmin();
-  const db = createServiceClient();
+  // User-client: die RPC ist SECURITY DEFINER und gated intern per
+  // is_platform_admin() → auth.uid(). Der Service-Role-Client hat keine
+  // JWT, also laeuft auth.uid() auf NULL und der Filter blockiert alle
+  // Reviews ("Dashboard bleibt leer"). TO authenticated GRANT greift.
+  const db = await createUserClient();
   const { data, error } = await db.rpc("admin_retrieval_quality_totals", {
     days,
     target_org: organizationId,
@@ -257,7 +265,8 @@ export async function getPassiveSignals(
   organizationId: string | null = null,
 ): Promise<PassiveSignals> {
   await requireAdmin();
-  const db = createServiceClient();
+  // Siehe getQualityTotals: User-Client wegen auth.uid()-Gate in der RPC.
+  const db = await createUserClient();
   const { data, error } = await db.rpc("admin_retrieval_passive_signals", {
     days,
     target_org: organizationId,
