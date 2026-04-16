@@ -395,12 +395,23 @@ export async function sendMessage(
   //    so Admins can reconstruct the retrieval path later. Histogram of
   //    retrieved_via arms is directly derivable from the tags tagChunks()
   //    attached above.
+  //
+  // chunk_ids is a uuid[] column, but the entity-first / operational arms
+  // synthesise string ids like "contact:<uuid>" for pseudo-chunks that
+  // don't exist in content_chunks. Pushing those into the column triggers
+  // Postgres 22P02 (invalid uuid syntax) — the insert fails silently, the
+  // client's router.refresh() then re-fetches messages without the
+  // assistant reply and the answer disappears from the chat. Filter to
+  // real uuids only; chunks_retrieved + retrieval_arms still cover the
+  // pseudo-chunks for the KPI dashboards.
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const retrievalArms: Record<string, number> = {};
   for (const c of chunks) {
     const arm = c.retrieved_via ?? "unknown";
     retrievalArms[arm] = (retrievalArms[arm] ?? 0) + 1;
   }
-  const chunkIds = chunks.map((c) => c.id);
+  const chunkIds = chunks.map((c) => c.id).filter((id) => UUID_RE.test(id));
   const latencyMs = Date.now() - startedAt;
   const telemetry = {
     chunk_ids: chunkIds,
@@ -411,31 +422,40 @@ export async function sendMessage(
   };
 
   // 7. Persist assistant message
+  // .throwOnError() so future schema drift is loud, not silent — the
+  // earlier bug shipped undetected because the insert error was ignored.
   if (response.type === "answer") {
-    await db.from("chat_messages").insert({
-      conversation_id: conversationId,
-      organization_id: orgId,
-      role: "assistant",
-      content: response.text,
-      sources: response.sources as unknown as object[],
-      model: response.model,
-      entity_context: entityContext ?? null,
-      rewritten_query: response.rewrittenQuery ?? null,
-      ...telemetry,
-    });
+    await db
+      .from("chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        organization_id: orgId,
+        role: "assistant",
+        content: response.text,
+        sources: response.sources as unknown as object[],
+        model: response.model,
+        entity_context: entityContext ?? null,
+        rewritten_query: response.rewrittenQuery ?? null,
+        ...telemetry,
+      })
+      .throwOnError();
   } else {
     // chunks-only fallback (LLM unavailable) — store as a system note
-    await db.from("chat_messages").insert({
-      conversation_id: conversationId,
-      organization_id: orgId,
-      role: "assistant",
-      content: "(LLM nicht verfuegbar — relevante Abschnitte werden angezeigt.)",
-      sources: response.items as unknown as object[],
-      model,
-      entity_context: entityContext ?? null,
-      rewritten_query: searchQuery !== trimmed ? searchQuery : null,
-      ...telemetry,
-    });
+    await db
+      .from("chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        organization_id: orgId,
+        role: "assistant",
+        content:
+          "(LLM nicht verfuegbar — relevante Abschnitte werden angezeigt.)",
+        sources: response.items as unknown as object[],
+        model,
+        entity_context: entityContext ?? null,
+        rewritten_query: searchQuery !== trimmed ? searchQuery : null,
+        ...telemetry,
+      })
+      .throwOnError();
   }
 
   // 8. Auto-title on first turn
