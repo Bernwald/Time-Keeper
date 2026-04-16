@@ -4,8 +4,13 @@
 -- and FTS arms still gate quality for the top results, so looser trigram
 -- recall just widens the candidate set, not the final top-K.
 --
--- Only the SET clause changes — function bodies stay identical to the
--- trigram_fuzzy_search migration from 2026-04-14.
+-- NOTE on Supabase permission: setting `pg_trgm.word_similarity_threshold`
+-- via a function-level SET clause is restricted on managed Supabase (role
+-- `postgres` can't set this GUC anymore). We therefore express the
+-- threshold as an explicit predicate `word_similarity(...) >= 0.3` in the
+-- WHERE clause instead of relying on the `<%` operator + GUC. Trade-off:
+-- the `gist_trgm_ops` index can no longer service the trigram arm, but the
+-- per-tenant chunk volume stays bounded and the arm is capped at LIMIT 30.
 
 CREATE OR REPLACE FUNCTION public.hybrid_search_chunks(
   p_org_id    UUID,
@@ -19,7 +24,6 @@ RETURNS TABLE (
   source_title TEXT, source_type TEXT, rank REAL
 )
 LANGUAGE sql STABLE
-SET pg_trgm.word_similarity_threshold = 0.3
 AS $$
   WITH fts AS (
     SELECT c.id,
@@ -69,7 +73,7 @@ AS $$
     FROM public.content_chunks c
     JOIN public.sources s ON s.id = c.source_id
     WHERE c.organization_id = p_org_id
-      AND p_query <% c.chunk_text
+      AND word_similarity(p_query, c.chunk_text) >= 0.3
       AND (
         p_user_id IS NULL
         OR s.folder_id IS NULL
@@ -117,7 +121,6 @@ RETURNS TABLE (
   source_title TEXT, source_type TEXT, rank REAL
 )
 LANGUAGE sql STABLE
-SET pg_trgm.word_similarity_threshold = 0.3
 AS $$
   WITH fts AS (
     SELECT c.id,
@@ -167,7 +170,7 @@ AS $$
     FROM public.content_chunks c
     JOIN public.sources s ON s.id = c.source_id
     WHERE c.organization_id = p_org_id
-      AND p_query <% c.chunk_text
+      AND word_similarity(p_query, c.chunk_text) >= 0.3
       AND (
         p_user_id IS NULL
         OR s.folder_id IS NULL
@@ -215,7 +218,6 @@ RETURNS TABLE (
   source_title TEXT, source_type TEXT, rank REAL
 )
 LANGUAGE sql STABLE
-SET pg_trgm.word_similarity_threshold = 0.3
 AS $$
   WITH fts AS (
     SELECT c.id,
@@ -243,7 +245,7 @@ AS $$
     FROM public.content_chunks c
     JOIN public.sources s ON s.id = c.source_id
     WHERE c.organization_id = p_org_id
-      AND p_query <% c.chunk_text
+      AND word_similarity(p_query, c.chunk_text) >= 0.3
       AND (
         p_user_id IS NULL
         OR s.folder_id IS NULL
