@@ -75,6 +75,14 @@ function relativeTime(iso: string | null): string {
   return `Sync vor ${d} Tagen`;
 }
 
+// Cron runs every 5 min. Anything older than 15 min (3 intervals) with no
+// in-flight work means the scheduler is lagging or the last run crashed.
+const SYNC_STALE_MS = 15 * 60 * 1000;
+function isSyncStale(iso: string | null): boolean {
+  if (!iso) return true;
+  return Date.now() - new Date(iso).getTime() > SYNC_STALE_MS;
+}
+
 function fileStateLabel(state: FileState): string {
   switch (state) {
     case "indexed":
@@ -209,6 +217,9 @@ function ConnectorCard(props: {
   const inFlight = stats.processing + stats.pending;
   const isSyncing = isActive && inFlight > 0;
 
+  const lastSyncedAt = integration?.last_synced_at ?? null;
+  const isStale = isActive && !isSyncing && isSyncStale(lastSyncedAt);
+
   type Health = { kind: "ok" | "sync" | "warn" | "idle"; label: string };
   let health: Health;
   if (!isActive) {
@@ -217,8 +228,15 @@ function ConnectorCard(props: {
     health = { kind: "sync", label: `Sync läuft… ${stats.indexed} / ${stats.total}` };
   } else if (stats.failed > 0) {
     health = { kind: "warn", label: `${stats.failed} Fehler` };
+  } else if (isStale) {
+    health = {
+      kind: "warn",
+      label: lastSyncedAt
+        ? `Sync hängt · ${relativeTime(lastSyncedAt)}`
+        : "noch nie synchronisiert",
+    };
   } else {
-    health = { kind: "ok", label: relativeTime(integration?.last_synced_at ?? null) };
+    health = { kind: "ok", label: relativeTime(lastSyncedAt) };
   }
 
   const healthDotColor =
@@ -240,6 +258,19 @@ function ConnectorCard(props: {
 
   return (
     <div className={card.flat} style={styles.panel}>
+      {isStale && (
+        <div
+          className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
+          style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}
+        >
+          <span aria-hidden>⚠️</span>
+          <span>
+            Der automatische Delta-Sync (alle 5 Minuten) scheint zu hängen.
+            Klicke auf <strong>Jetzt synchronisieren</strong> oder prüfe die
+            Läufe unter <em>Admin → Integrationen</em>.
+          </span>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-4">
         <div className="min-w-0">
           <h2

@@ -39,6 +39,8 @@ export async function connectGdrive(): Promise<void> {
 }
 
 // Trigger an initial-sync for the given provider via the edge function.
+// Surfaces HTTP + function errors back to /quellen via a search param so
+// the user sees why nothing happened after clicking "Jetzt synchronisieren".
 export async function triggerInitialSync(
   providerId: "sharepoint" | "google_drive",
 ): Promise<void> {
@@ -48,17 +50,34 @@ export async function triggerInitialSync(
       ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-sharepoint`
       : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-gdrive`;
 
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({ action: "initial-sync", organization_id: orgId }),
-  });
+  let errorMessage: string | null = null;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ action: "initial-sync", organization_id: orgId }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      errorMessage = `Sync fehlgeschlagen (${res.status}): ${body.slice(0, 200)}`;
+      console.error("[triggerInitialSync]", providerId, res.status, body);
+    }
+  } catch (err) {
+    errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("[triggerInitialSync] fetch failed:", providerId, err);
+  }
 
   revalidatePath("/quellen");
   revalidatePath("/papierkorb");
+
+  if (errorMessage) {
+    redirect(`/quellen?error=${encodeURIComponent(errorMessage)}`);
+  } else {
+    redirect(`/quellen?connected=${encodeURIComponent(providerId === "sharepoint" ? "SharePoint synchronisiert" : "Google Drive synchronisiert")}`);
+  }
 }
 
 // Re-enqueue the latest raw_events row for a single connector source so the
@@ -126,29 +145,43 @@ export async function reconcileConnector(
       ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-sharepoint`
       : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/connector-gdrive`;
 
+  const call = async (action: "initial-sync" | "reconcile"): Promise<string | null> => {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ action, organization_id: orgId }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("[reconcileConnector]", action, res.status, body);
+        return `${action} fehlgeschlagen (${res.status}): ${body.slice(0, 200)}`;
+      }
+      return null;
+    } catch (err) {
+      console.error("[reconcileConnector] fetch failed:", action, err);
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+
   // First do a full re-listing so newly added or restored Drive files land
   // as raw_events, then reconcile away anything that's gone. Sequential — the
   // reconcile pass should see the freshly upserted sources.
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({ action: "initial-sync", organization_id: orgId }),
-  });
-
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-    body: JSON.stringify({ action: "reconcile", organization_id: orgId }),
-  });
+  const syncErr = await call("initial-sync");
+  const reconcileErr = syncErr ? null : await call("reconcile");
+  const errorMessage = syncErr ?? reconcileErr;
 
   revalidatePath("/quellen");
   revalidatePath("/papierkorb");
+
+  if (errorMessage) {
+    redirect(`/quellen?error=${encodeURIComponent(errorMessage)}`);
+  } else {
+    redirect(`/quellen?connected=${encodeURIComponent("Aufräumen abgeschlossen")}`);
+  }
 }
 
 // Soft-delete a single source — moves it into the trash.
@@ -192,6 +225,9 @@ export async function saveSharepointTokens(tokens: {
   const db = createServiceClient();
   const expiresAt = new Date(Date.now() + (tokens.expires_in - 60) * 1000).toISOString();
 
+  // Preserve last_synced_at on reconnect. An OAuth refresh shouldn't wipe
+  // the sync history — that's what made /quellen render "noch nie
+  // synchronisiert" for integrations that were clearly syncing before.
   const { error } = await db
     .from("organization_integrations")
     .upsert(
@@ -205,7 +241,6 @@ export async function saveSharepointTokens(tokens: {
           access_token: tokens.access_token,
           token_expires_at: expiresAt,
         },
-        last_synced_at: null,
       },
       { onConflict: "organization_id,provider_id" },
     );
@@ -238,7 +273,6 @@ export async function saveGdriveTokens(tokens: {
           access_token: tokens.access_token,
           token_expires_at: expiresAt,
         },
-        last_synced_at: null,
       },
       { onConflict: "organization_id,provider_id" },
     );
