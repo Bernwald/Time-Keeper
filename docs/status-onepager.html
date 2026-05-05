@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TimeKeeper — Status Onepager · Mai 2026</title>
+<style>
+  :root {
+    --bg:        #0b0d12;
+    --surface:   #13161f;
+    --surface2:  #1a1e2c;
+    --surface3:  #212638;
+    --line:      rgba(124,109,250,0.18);
+    --line-soft: rgba(124,109,250,0.10);
+    --accent:    #7c6dfa;
+    --accent2:   #00d4aa;
+    --accent3:   #f97316;
+    --accent4:   #38bdf8;
+    --text:      #eef0ff;
+    --muted:     #8a92b0;
+    --dim:       #5b6280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── A4 page ───────────────────────────────────── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 24px auto;
+    padding: 14mm 14mm 12mm;
+    background: linear-gradient(180deg, #0c0f17 0%, #0b0d12 100%);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+  .page::before {
+    content: "";
+    position: absolute;
+    top: -120px; right: -120px;
+    width: 380px; height: 380px;
+    background: radial-gradient(circle, rgba(124,109,250,0.22) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .page::after {
+    content: "";
+    position: absolute;
+    bottom: -140px; left: -140px;
+    width: 420px; height: 420px;
+    background: radial-gradient(circle, rgba(0,212,170,0.14) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .page > * { position: relative; z-index: 1; }
+
+  /* ── Header ─────────────────────────────────────── */
+  header.top {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+  }
+  .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 18px; color: #0b0d12;
+    box-shadow: 0 6px 20px rgba(124,109,250,0.35);
+  }
+  .brand-name {
+    font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  h1 {
+    font-size: 30px; font-weight: 900; line-height: 1.1;
+    background: linear-gradient(120deg, #ffffff 0%, var(--accent) 60%, var(--accent2) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    max-width: 110mm;
+  }
+  .meta {
+    text-align: right; font-size: 11px; color: var(--muted);
+    line-height: 1.6;
+  }
+  .meta .badge {
+    display: inline-block;
+    background: var(--surface2); border: 1px solid var(--line);
+    color: var(--accent2); padding: 3px 9px; border-radius: 999px;
+    font-weight: 700; font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .meta .date { color: var(--text); font-weight: 600; }
+
+  /* ── Hero claim ─────────────────────────────────── */
+  .claim {
+    font-size: 13.5px; color: var(--muted);
+    line-height: 1.55; margin-bottom: 18px;
+    max-width: 170mm;
+  }
+  .claim strong { color: var(--text); font-weight: 600; }
+
+  /* ── KPI grid ───────────────────────────────────── */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    margin-bottom: 18px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 14px 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .kpi.k2::before { background: linear-gradient(90deg, var(--accent2), var(--accent4)); }
+  .kpi.k3::before { background: linear-gradient(90deg, var(--accent4), var(--accent)); }
+  .kpi.k4::before { background: linear-gradient(90deg, var(--accent3), var(--accent)); }
+  .kpi .num {
+    font-size: 30px; font-weight: 900; letter-spacing: -0.02em;
+    line-height: 1; color: var(--text);
+  }
+  .kpi .label {
+    margin-top: 4px;
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600;
+  }
+  .kpi .sub { margin-top: 2px; font-size: 10.5px; color: var(--dim); }
+
+  /* ── Section heading ────────────────────────────── */
+  .section-h {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 800;
+    margin-bottom: 10px;
+  }
+  .section-h::before {
+    content: ""; width: 18px; height: 2px;
+    background: var(--accent); border-radius: 2px;
+  }
+
+  /* ── Capability grid ────────────────────────────── */
+  .caps {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    margin-bottom: 18px;
+  }
+  .cap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  .cap-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+  }
+  .cap-icon {
+    width: 26px; height: 26px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    background: rgba(124,109,250,0.14);
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .cap.c2 .cap-icon { background: rgba(0,212,170,0.12); color: var(--accent2); }
+  .cap.c3 .cap-icon { background: rgba(56,189,248,0.12); color: var(--accent4); }
+  .cap.c4 .cap-icon { background: rgba(249,115,22,0.14); color: var(--accent3); }
+  .cap-title {
+    font-size: 13px; font-weight: 700; color: var(--text);
+  }
+  .cap-status {
+    display: inline-block;
+    margin-left: auto;
+    font-size: 9.5px; color: var(--accent2); font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px;
+    background: rgba(0,212,170,0.10); border: 1px solid rgba(0,212,170,0.25);
+  }
+  .cap-status.beta { color: var(--accent3); background: rgba(249,115,22,0.10); border-color: rgba(249,115,22,0.25); }
+  .cap ul {
+    list-style: none; padding: 0; margin: 0;
+  }
+  .cap li {
+    font-size: 11.5px; color: var(--muted);
+    line-height: 1.55;
+    padding-left: 14px;
+    position: relative;
+  }
+  .cap li + li { margin-top: 2px; }
+  .cap li::before {
+    content: "›"; position: absolute; left: 0;
+    color: var(--accent); font-weight: 700;
+  }
+
+  /* ── Strategy / Next steps row ──────────────────── */
+  .row {
+    display: grid; grid-template-columns: 1.05fr 1fr; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .panel.accent {
+    background: linear-gradient(135deg, rgba(124,109,250,0.10), rgba(0,212,170,0.06));
+    border-color: rgba(124,109,250,0.32);
+  }
+  .panel .h {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    font-weight: 800; color: var(--accent); margin-bottom: 8px;
+  }
+  .panel .lead {
+    font-size: 13px; line-height: 1.5; color: var(--text);
+    margin-bottom: 8px;
+  }
+  .pillars {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    margin-top: 8px;
+  }
+  .pillar {
+    font-size: 10px; color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line-soft);
+    border-radius: 8px; padding: 6px 8px;
+    line-height: 1.35;
+  }
+  .pillar b { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; font-size: 10.5px; }
+
+  .next-list { list-style: none; padding: 0; margin: 0; }
+  .next-list li {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .next-list li:last-child { border-bottom: 0; }
+  .next-list .step {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: var(--surface3);
+    color: var(--accent); font-weight: 800; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .next-list .txt { font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+  .next-list .txt b { color: var(--text); font-weight: 600; }
+
+  /* ── Stack strip ────────────────────────────────── */
+  .stack {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin-bottom: 14px;
+  }
+  .chip {
+    font-size: 10.5px; color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line-soft);
+    padding: 3px 9px; border-radius: 999px;
+    font-weight: 500;
+  }
+  .chip b { color: var(--text); font-weight: 700; }
+
+  /* ── Footer ─────────────────────────────────────── */
+  footer.bot {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 10px; border-top: 1px solid var(--line);
+    font-size: 10px; color: var(--dim);
+  }
+  footer.bot .tag { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* ── Print ──────────────────────────────────────── */
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #0b0d12; }
+    .page {
+      margin: 0; box-shadow: none;
+      width: 210mm; min-height: 297mm;
+      page-break-after: avoid;
+    }
+    .print-hint { display: none !important; }
+  }
+
+  .print-hint {
+    position: fixed; bottom: 18px; right: 18px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    z-index: 100;
+  }
+  .print-hint b { color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============ HEADER ============ -->
+  <header class="top">
+    <div>
+      <div class="brand-row">
+        <div class="logo">T</div>
+        <span class="brand-name">TimeKeeper · AI Foundation</span>
+      </div>
+      <h1>Status-Onepager: Wo wir gerade stehen</h1>
+    </div>
+    <div class="meta">
+      <span class="badge">Internal Snapshot</span><br/>
+      <span class="date">Mai 2026</span><br/>
+      Tenant 1: time-keeper<br/>
+      Branch: <code style="color:var(--accent4);">main</code>
+    </div>
+  </header>
+
+  <!-- ============ CLAIM ============ -->
+  <p class="claim">
+    TimeKeeper ist ein <strong>KI-Betriebssystem für KMU</strong> — wir verkaufen Ergebnisse, nicht Software.
+    Erste Tenant-Implementierung läuft, das Datenmodell ist Multi-Tenant by Design.
+    <strong>Orchestrator + Glue-Layer</strong> stehen, der Kern (Connectoren · RAG · Berater-Cockpit · Telefon-Assistent) ist live.
+  </p>
+
+  <!-- ============ KPI ROW ============ -->
+  <div class="kpis">
+    <div class="kpi k1">
+      <div class="num">34</div>
+      <div class="label">App-Routen</div>
+      <div class="sub">Next.js 16 · App Router · SSR</div>
+    </div>
+    <div class="kpi k2">
+      <div class="num">41</div>
+      <div class="label">DB-Migrations</div>
+      <div class="sub">43 Tabellen · RLS · pgvector</div>
+    </div>
+    <div class="kpi k3">
+      <div class="num">10</div>
+      <div class="label">Edge Functions</div>
+      <div class="sub">Connectoren · Worker · Phone</div>
+    </div>
+    <div class="kpi k4">
+      <div class="num">112</div>
+      <div class="label">TS/TSX-Module</div>
+      <div class="sub">Server Components first</div>
+    </div>
+  </div>
+
+  <!-- ============ CAPABILITIES ============ -->
+  <div class="section-h">Was bereits steht</div>
+  <div class="caps">
+
+    <div class="cap c1">
+      <div class="cap-head">
+        <div class="cap-icon">◆</div>
+        <div class="cap-title">Wissen, Suche &amp; Chat (RAG)</div>
+        <span class="cap-status">Live</span>
+      </div>
+      <ul>
+        <li>Hybride Suche: pgvector + Trigram + Tag-Boost + RRF-Reranking</li>
+        <li>Query-Expansion gegen Umformulierungen, Entity-First-Retrieval</li>
+        <li>Chat mit Konversationen, Quellenzitaten &amp; Review-Workflow</li>
+        <li>Auto-Entity-Extraction über Cron-Worker</li>
+      </ul>
+    </div>
+
+    <div class="cap c2">
+      <div class="cap-head">
+        <div class="cap-icon">◇</div>
+        <div class="cap-title">Connectoren &amp; Pipeline</div>
+        <span class="cap-status">Live</span>
+      </div>
+      <ul>
+        <li>Google Drive · SharePoint · Google Calendar (Read-Sync)</li>
+        <li>Write-Back-Connector: Aktionen in Fremdsystem auslösen</li>
+        <li>Bronze → Silver → Gold via <code>pgmq</code> + Cron-Worker</li>
+        <li>Soft-Delete · Reconcile · Retry · Sync-Logs &amp; KPI-Spuren</li>
+      </ul>
+    </div>
+
+    <div class="cap c3">
+      <div class="cap-head">
+        <div class="cap-icon">◈</div>
+        <div class="cap-title">Telefon-Assistent</div>
+        <span class="cap-status">Live</span>
+      </div>
+      <ul>
+        <li>Vapi-Provisionierung, Nummern-Verwaltung, Call-Logs</li>
+        <li>RAG-gestützte Antworten aus Tenant-Daten</li>
+        <li>Kalender-Integration für Termin-Buchung</li>
+        <li>Call-Complete-Hook schreibt Activities zurück</li>
+      </ul>
+    </div>
+
+    <div class="cap c4">
+      <div class="cap-head">
+        <div class="cap-icon">◉</div>
+        <div class="cap-title">Berater-Cockpit &amp; Plattform</div>
+        <span class="cap-status">Live</span>
+      </div>
+      <ul>
+        <li>Admin: Kunden · Integrationen · Branding · KI-Settings · Tags</li>
+        <li>Plan-Tiers + Feature-Flags pro Organisation</li>
+        <li>Permission-Groups + Source-Folder-Access (granular)</li>
+        <li>Retrieval-Qualitäts-Dashboard mit Review-KPI</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ============ STACK STRIP ============ -->
+  <div class="stack">
+    <span class="chip"><b>Next.js 16</b> · App Router</span>
+    <span class="chip"><b>React 19</b></span>
+    <span class="chip"><b>TypeScript 5.9</b></span>
+    <span class="chip"><b>Tailwind v4</b> · Tokens</span>
+    <span class="chip"><b>Supabase</b> · Postgres + Auth + Storage</span>
+    <span class="chip"><b>pgvector</b></span>
+    <span class="chip"><b>pgmq</b></span>
+    <span class="chip"><b>Edge Functions</b> (Deno)</span>
+    <span class="chip"><b>Anthropic</b> · OpenAI</span>
+    <span class="chip"><b>Vapi</b> Voice</span>
+    <span class="chip"><b>Vercel</b> · Hosting</span>
+    <span class="chip"><b>Zod 4</b></span>
+  </div>
+
+  <!-- ============ STRATEGY + NEXT ============ -->
+  <div class="row">
+
+    <div class="panel accent">
+      <div class="h">Strategischer Anker</div>
+      <div class="lead">
+        Wir bauen die <b>Schicht zwischen den Tools</b> des Kunden — Orchestrator, Glue-Layer, Cockpit.
+        Nichts, was es schon gut gibt, wird nachgebaut.
+      </div>
+      <div class="pillars">
+        <div class="pillar"><b>Orchestrator</b>Anbinden &amp; auditieren</div>
+        <div class="pillar"><b>Berater-First</b>Konfig &amp; Freigabe</div>
+        <div class="pillar"><b>Multi-Tenant</b>Branchen-agnostisch</div>
+        <div class="pillar"><b>Bronze→Gold</b>Pipeline-Disziplin</div>
+        <div class="pillar"><b>Outcome-KPI</b>Ergebnisse messen</div>
+        <div class="pillar"><b>Wiederverwendung</b>vor Neuaufbau</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="h">Nächste Schritte</div>
+      <ul class="next-list">
+        <li>
+          <div class="step">1</div>
+          <div class="txt"><b>Connector-Katalog v1.</b> Saubere Trennung Read-Sync vs. Write-Back, aufsetzend auf <code>integration_providers</code>.</div>
+        </li>
+        <li>
+          <div class="step">2</div>
+          <div class="txt"><b>Outcome-Templates pro Branche.</b> Workflow- &amp; Prompt-Pakete, die der Berater pro Kunde aktiviert.</div>
+        </li>
+        <li>
+          <div class="step">3</div>
+          <div class="txt"><b>KPI-Dashboard (Kunde).</b> Sichtbar machen, welche Ergebnisse die Plattform tatsächlich erzeugt hat.</div>
+        </li>
+        <li>
+          <div class="step">4</div>
+          <div class="txt"><b>Pricing-Refresh.</b> Plan-Tiers an Ergebnissen statt an Features ausrichten.</div>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="bot">
+    <span><span class="tag">TimeKeeper</span> · AI Foundation Platform · <span style="color:var(--muted);">Internal</span></span>
+    <span>Snapshot · 2026-05-05 · Single Source: <code style="color:var(--accent4);">docs/strategie.md</code></span>
+  </footer>
+
+</div>
+
+<div class="print-hint">
+  <b>Tipp:</b> Strg/Cmd + P → „Als PDF speichern" für den modernen Onepager.
+</div>
+
+</body>
+</html>
