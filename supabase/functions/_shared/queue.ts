@@ -46,6 +46,19 @@ export async function readBatch<T>(
   return (data ?? []) as QueueMessage<T>[];
 }
 
+// Cheap pre-flight check so cron-driven workers can skip the heavier
+// pgmq.read + downstream work when there is nothing to do. Backed by
+// pgmq.metrics() — a single COUNT under the hood. Defined in migration
+// 20260506140000_throttle_pipeline_crons.sql.
+export async function queueLength(queue: QueueName): Promise<number> {
+  const supabase = getServiceClient();
+  const { data, error } = await supabase.rpc("pgmq_queue_length", {
+    p_queue: queue,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export async function ack(queue: QueueName, msgId: number): Promise<void> {
   const supabase = getServiceClient();
   const { error } = await supabase.rpc("pgmq_delete", {

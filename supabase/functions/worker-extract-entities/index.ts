@@ -20,10 +20,13 @@
 // override via EXTRACTION_MODEL (default "gpt-4o-mini").
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
-import { readBatch, ack, deadLetter } from "../_shared/queue.ts";
+import { readBatch, ack, deadLetter, queueLength } from "../_shared/queue.ts";
 
 const QUEUE                = "extract";
-const VISIBILITY_TIMEOUT   = 180; // seconds — LLM call can take 10–30s
+// Visibility timeout must exceed worst-case batch wall time. With a 2-min
+// cron interval and BATCH_SIZE=3 LLM calls of 10–30s each, 300s leaves
+// plenty of head room before pgmq makes a message visible again.
+const VISIBILITY_TIMEOUT   = 300;
 const BATCH_SIZE           = 3;
 const MAX_ATTEMPTS_PER_MSG = 3;
 // LLM input budget. GPT-4o-mini has a 128k context window, so 40k is
@@ -285,6 +288,13 @@ async function handleMessage(msg: ExtractMsg): Promise<void> {
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") return errorResponse("Method not allowed", 405);
+
+    // Conditional polling: extract is the most expensive worker (per-message
+    // LLM call), so skipping when the queue is empty matters most here.
+    const pending = await queueLength(QUEUE);
+    if (pending === 0) {
+      return jsonResponse({ skipped: "queue empty", processed: 0, failed: 0, batch: 0 });
+    }
 
     const messages = await readBatch<ExtractMsg>(QUEUE, VISIBILITY_TIMEOUT, BATCH_SIZE);
 

@@ -9,7 +9,7 @@
 // unknown is acked silently (the raw row is preserved for later replay).
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
-import { readBatch, ack, deadLetter, enqueue } from "../_shared/queue.ts";
+import { readBatch, ack, deadLetter, enqueue, queueLength } from "../_shared/queue.ts";
 import { flattenPayloadToText } from "../_shared/normalize.ts";
 
 const QUEUE                 = "normalize";
@@ -300,6 +300,15 @@ async function normalizeGoogleCalendarEvent(
 Deno.serve(async (req) => {
   try {
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
+
+  // Conditional polling: a single COUNT against pgmq.metrics is much cheaper
+  // than pgmq.read + downstream lookups. With cron firing every 2 minutes
+  // and queues empty most of the time, this turns "always do work" into
+  // "only do work when work exists".
+  const pending = await queueLength(QUEUE);
+  if (pending === 0) {
+    return jsonResponse({ skipped: "queue empty", processed: 0, failed: 0, batch: 0 });
+  }
 
   const supabase = getServiceClient();
   const messages = await readBatch<NormalizeMsg>(QUEUE, VISIBILITY_TIMEOUT, BATCH_SIZE);
