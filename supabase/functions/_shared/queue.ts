@@ -8,7 +8,7 @@
 
 import { getServiceClient } from "./supabase.ts";
 
-export type QueueName = "ingest" | "normalize" | "embed" | "index";
+export type QueueName = "ingest" | "normalize" | "embed" | "index" | "extract";
 
 export interface QueueMessage<T = unknown> {
   msg_id:     number;

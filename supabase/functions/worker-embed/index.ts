@@ -11,7 +11,7 @@
 // processed an entity it is immediately available to the AI layer.
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
-import { readBatch, ack, deadLetter } from "../_shared/queue.ts";
+import { readBatch, ack, deadLetter, enqueue } from "../_shared/queue.ts";
 import { embedText } from "../_shared/embeddings.ts";
 import { chunkText, chunkTabularText, chunkVerticalText } from "../_shared/chunking.ts";
 
@@ -269,6 +269,25 @@ Deno.serve(async (req) => {
             .update({ status: "ready", sync_status: "success" })
             .eq("id", sourceId)
             .eq("organization_id", msg.organization_id);
+
+          // Kick off auto-entity-extraction. The worker-extract-entities
+          // function decides whether this source looks like a structured
+          // list of contacts/companies/projects and, if yes, writes rows
+          // into the CRM tables so "alle Vertriebskontakte"-style queries
+          // can hit the entity_list retrieval path without manual tagging.
+          try {
+            await enqueue("extract", {
+              organization_id: msg.organization_id,
+              source_id:       sourceId,
+            } as Record<string, unknown>);
+          } catch (extractErr) {
+            // Non-fatal: the embedding succeeded, only extraction enqueue
+            // failed. Log and move on — re-ingest will retry.
+            console.error("[worker-embed] extract enqueue failed", {
+              source_id: sourceId,
+              error: (extractErr as { message?: string })?.message ?? String(extractErr),
+            });
+          }
         }
       }
 
