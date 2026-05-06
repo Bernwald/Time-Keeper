@@ -9,7 +9,10 @@
       "Bash(npx supabase:*)",
       "Bash(npm install:*)",
       "Bash(python3 -c:*)",
-      "Bash(node -e:*)"
+      "Bash(node -e:*)",
+      "mcp__scheduled-tasks__list_scheduled_tasks",
+      "mcp__scheduled-tasks__update_scheduled_task",
+      "Bash(npm run *)"
     ]
   }
 }
