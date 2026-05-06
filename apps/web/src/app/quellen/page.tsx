@@ -12,6 +12,7 @@ type Integration = {
   provider_id: string;
   status: string;
   last_synced_at: string | null;
+  error_message: string | null;
   config: Record<string, unknown> | null;
 };
 
@@ -123,7 +124,7 @@ export default async function QuellenPage({
 
   const { data: integrationsRaw } = await db
     .from("organization_integrations")
-    .select("provider_id, status, last_synced_at, config")
+    .select("provider_id, status, last_synced_at, error_message, config")
     .eq("organization_id", orgId)
     .in("provider_id", ["sharepoint", "google_drive"]);
   const integrations = (integrationsRaw ?? []) as Integration[];
@@ -214,6 +215,7 @@ function ConnectorCard(props: {
 }) {
   const { providerId, integration, files, stats } = props;
   const isActive = integration?.status === "active";
+  const isErrored = integration?.status === "error";
   const inFlight = stats.processing + stats.pending;
   const isSyncing = isActive && inFlight > 0;
 
@@ -222,7 +224,9 @@ function ConnectorCard(props: {
 
   type Health = { kind: "ok" | "sync" | "warn" | "idle"; label: string };
   let health: Health;
-  if (!isActive) {
+  if (isErrored) {
+    health = { kind: "warn", label: "Token-Refresh fehlgeschlagen" };
+  } else if (!isActive) {
     health = { kind: "warn", label: integration ? "Token abgelaufen" : "nicht verbunden" };
   } else if (isSyncing) {
     health = { kind: "sync", label: `Sync läuft… ${stats.indexed} / ${stats.total}` };
@@ -258,7 +262,26 @@ function ConnectorCard(props: {
 
   return (
     <div className={card.flat} style={styles.panel}>
-      {isStale && (
+      {isErrored && (
+        <div
+          className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
+          style={{ background: "var(--color-danger-soft, #fee)", color: "var(--color-danger, #c00)" }}
+        >
+          <span aria-hidden>⚠️</span>
+          <div className="min-w-0">
+            <p className="font-medium">Token-Refresh fehlgeschlagen.</p>
+            <p className="mt-1 break-words">
+              {integration?.error_message ??
+                "Der gespeicherte Refresh-Token wurde von der Gegenstelle abgelehnt."}
+            </p>
+            <p className="mt-1">
+              Klicke <strong>Erneut verbinden</strong> und durchlaufe den
+              OAuth-Flow neu — danach läuft der Sync wieder.
+            </p>
+          </div>
+        </div>
+      )}
+      {!isErrored && isStale && (
         <div
           className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
           style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}
@@ -297,7 +320,7 @@ function ConnectorCard(props: {
           {!isActive ? (
             <form action={props.connectAction}>
               <button type="submit" className={btn.primary} style={styles.accent}>
-                Verbinden
+                {integration ? "Erneut verbinden" : "Verbinden"}
               </button>
             </form>
           ) : (

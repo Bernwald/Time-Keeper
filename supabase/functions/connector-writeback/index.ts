@@ -40,11 +40,13 @@ async function getAccessToken(
   }
   if (!c.refresh_token) throw new Error(`${providerId} not connected`);
 
+  // refresh*AccessToken now throws with provider error detail on failure;
+  // the throw propagates back to the caller as a 500 with the AADSTS / Google
+  // reason in the body.
   const refreshed =
     providerId === "sharepoint"
       ? await refreshMicrosoftAccessToken(c.refresh_token, orgId)
       : await refreshGoogleAccessToken(c.refresh_token, orgId);
-  if (!refreshed) throw new Error(`${providerId} token refresh failed`);
 
   await supabase
     .from("organization_integrations")

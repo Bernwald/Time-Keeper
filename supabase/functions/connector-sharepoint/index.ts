@@ -30,10 +30,24 @@ async function getValidAccessToken(row: IntegrationRow): Promise<string> {
     if (Date.parse(c.token_expires_at) - Date.now() > 60_000) return c.access_token;
   }
   if (!c.refresh_token) throw new Error("sharepoint integration has no refresh_token");
-  const refreshed = await refreshMicrosoftAccessToken(c.refresh_token, row.organization_id);
-  if (!refreshed) throw new Error("microsoft token refresh failed");
 
   const supabase = getServiceClient();
+  let refreshed: Awaited<ReturnType<typeof refreshMicrosoftAccessToken>>;
+  try {
+    refreshed = await refreshMicrosoftAccessToken(c.refresh_token, row.organization_id);
+  } catch (err) {
+    // Park the integration so cron stops retrying every 5 min and the UI
+    // can flip to "Erneut verbinden". The error_message reaches /quellen
+    // through the integration row.
+    const message = err instanceof Error ? err.message : String(err);
+    await supabase
+      .from("organization_integrations")
+      .update({ status: "error", error_message: message })
+      .eq("organization_id", row.organization_id)
+      .eq("provider_id", PROVIDER_ID);
+    throw err;
+  }
+
   await supabase
     .from("organization_integrations")
     .update({

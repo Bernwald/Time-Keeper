@@ -25,10 +25,21 @@ async function getValidAccessToken(row: IntegrationRow): Promise<string> {
     if (Date.parse(c.token_expires_at) - Date.now() > 60_000) return c.access_token;
   }
   if (!c.refresh_token) throw new Error("google_drive integration has no refresh_token");
-  const refreshed = await refreshGoogleAccessToken(c.refresh_token, row.organization_id);
-  if (!refreshed) throw new Error("google token refresh failed");
 
   const supabase = getServiceClient();
+  let refreshed: Awaited<ReturnType<typeof refreshGoogleAccessToken>>;
+  try {
+    refreshed = await refreshGoogleAccessToken(c.refresh_token, row.organization_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await supabase
+      .from("organization_integrations")
+      .update({ status: "error", error_message: message })
+      .eq("organization_id", row.organization_id)
+      .eq("provider_id", PROVIDER_ID);
+    throw err;
+  }
+
   await supabase
     .from("organization_integrations")
     .update({
