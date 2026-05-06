@@ -216,11 +216,15 @@ function ConnectorCard(props: {
   const { providerId, integration, files, stats } = props;
   const isActive = integration?.status === "active";
   const isErrored = integration?.status === "error";
+  // Sync-side errors (e.g. SharePoint Online license missing, Drive 403) leave
+  // status='active' because the OAuth refresh itself worked, but the run still
+  // failed. error_message captures the reason — surface it as a warning.
+  const hasRunError = isActive && Boolean(integration?.error_message);
   const inFlight = stats.processing + stats.pending;
   const isSyncing = isActive && inFlight > 0;
 
   const lastSyncedAt = integration?.last_synced_at ?? null;
-  const isStale = isActive && !isSyncing && isSyncStale(lastSyncedAt);
+  const isStale = isActive && !isSyncing && !hasRunError && isSyncStale(lastSyncedAt);
 
   type Health = { kind: "ok" | "sync" | "warn" | "idle"; label: string };
   let health: Health;
@@ -228,6 +232,8 @@ function ConnectorCard(props: {
     health = { kind: "warn", label: "Token-Refresh fehlgeschlagen" };
   } else if (!isActive) {
     health = { kind: "warn", label: integration ? "Token abgelaufen" : "nicht verbunden" };
+  } else if (hasRunError) {
+    health = { kind: "warn", label: "Sync-Lauf gescheitert" };
   } else if (isSyncing) {
     health = { kind: "sync", label: `Sync läuft… ${stats.indexed} / ${stats.total}` };
   } else if (stats.failed > 0) {
@@ -281,7 +287,19 @@ function ConnectorCard(props: {
           </div>
         </div>
       )}
-      {!isErrored && isStale && (
+      {!isErrored && hasRunError && (
+        <div
+          className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
+          style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}
+        >
+          <span aria-hidden>⚠️</span>
+          <div className="min-w-0">
+            <p className="font-medium">Letzter Sync-Lauf ist gescheitert.</p>
+            <p className="mt-1 break-words">{integration?.error_message}</p>
+          </div>
+        </div>
+      )}
+      {!isErrored && !hasRunError && isStale && (
         <div
           className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
           style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}

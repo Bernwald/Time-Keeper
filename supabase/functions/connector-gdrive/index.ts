@@ -162,18 +162,31 @@ Deno.serve(async (req) => {
   const supabase = getServiceClient();
 
   if (body.organization_id) {
-    try {
-      const result =
-        action === "reconcile"
-          ? await reconcileOrg(body.organization_id)
-          : await syncOrg(
-              body.organization_id,
-              action === "initial-sync" ? "initial" : "delta",
-            );
-      return jsonResponse(result);
-    } catch (err) {
-      return errorResponse(err instanceof Error ? err.message : String(err), 500);
+    const orgId = body.organization_id;
+    // Manual triggers (the "Jetzt synchronisieren" button) used to wait
+    // synchronously for the full sync — 60-70s for an initial run with 80
+    // files. The user thought the button was dead and clicked again. We now
+    // hand the work to EdgeRuntime.waitUntil so the function returns 202
+    // immediately and the run keeps going in the background. integration_runs
+    // captures the outcome; the UI polls via revalidatePath.
+    const work = (async () => {
+      try {
+        if (action === "reconcile") {
+          await reconcileOrg(orgId);
+        } else {
+          await syncOrg(orgId, action === "initial-sync" ? "initial" : "delta");
+        }
+      } catch (err) {
+        console.error("[connector-gdrive] background run failed:", err);
+      }
+    })();
+
+    type ER = { waitUntil?: (p: Promise<unknown>) => void };
+    const runtime = (globalThis as unknown as { EdgeRuntime?: ER }).EdgeRuntime;
+    if (runtime?.waitUntil) {
+      runtime.waitUntil(work);
     }
+    return jsonResponse({ queued: true, action }, 202);
   }
 
   const { data: rows } = await supabase
