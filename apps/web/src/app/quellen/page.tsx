@@ -2,9 +2,15 @@ import { redirect } from "next/navigation";
 import { createUserClient, getUser } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
-import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
+import { connectSharepoint, connectGdrive } from "./actions";
 import { AutoRefreshWhileSyncing } from "./auto-refresh";
-import { RetryButton, ReindexButton, DeleteButton, ReconcileButton } from "./retry-button";
+import {
+  RetryButton,
+  ReindexButton,
+  DeleteButton,
+  ReconcileButton,
+  SyncButton,
+} from "./retry-button";
 
 export const dynamic = "force-dynamic";
 
@@ -343,11 +349,7 @@ function ConnectorCard(props: {
             </form>
           ) : (
             <>
-              <form action={triggerInitialSync.bind(null, providerId)}>
-                <button type="submit" className={btn.secondary} style={styles.panel}>
-                  Jetzt synchronisieren
-                </button>
-              </form>
+              <SyncButton providerId={providerId} />
               {providerId === "google_drive" && <ReconcileButton providerId={providerId} />}
             </>
           )}

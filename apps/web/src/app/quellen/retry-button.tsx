@@ -7,6 +7,7 @@ import {
   restoreSource,
   purgeSource,
   reconcileConnector,
+  triggerInitialSync,
 } from "./actions";
 
 type IconKind = "retry" | "delete" | "restore" | "purge" | "reconcile" | "reindex";
@@ -119,5 +120,53 @@ export function ReconcileButton({
       confirm="Alle Dateien entfernen, die nicht mehr in der Quelle existieren?"
       withLabel
     />
+  );
+}
+
+// "Jetzt synchronisieren" — initial sync can take 60-90s for ~80 files,
+// so the button needs an explicit pending state. Otherwise the user thinks
+// nothing happened, clicks again, and we get a stack of parallel runs.
+export function SyncButton({
+  providerId,
+}: {
+  providerId: "sharepoint" | "google_drive";
+}) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => {
+        startTransition(async () => {
+          try {
+            await triggerInitialSync(providerId);
+          } catch (err) {
+            console.error("[sync-button]", providerId, err);
+          }
+        });
+      }}
+      className="inline-flex items-center justify-center gap-2 min-h-[44px] px-3 rounded-[var(--radius-md)] text-sm font-medium border"
+      style={{
+        background: "var(--color-panel)",
+        color: "var(--color-text)",
+        borderColor: "var(--color-border)",
+        opacity: pending ? 0.6 : 1,
+        cursor: pending ? "wait" : "pointer",
+      }}
+      aria-busy={pending}
+    >
+      {pending ? (
+        <>
+          <span
+            aria-hidden
+            className="inline-block w-3 h-3 rounded-full animate-pulse"
+            style={{ background: "var(--color-accent)" }}
+          />
+          <span>Sync läuft… (kann ~60s dauern)</span>
+        </>
+      ) : (
+        <span>Jetzt synchronisieren</span>
+      )}
+    </button>
   );
 }

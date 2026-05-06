@@ -76,11 +76,8 @@ export async function triggerInitialSync(
   if (errorMessage) {
     redirect(`/quellen?error=${encodeURIComponent(errorMessage)}`);
   } else {
-    // Edge function returns 202 immediately and runs the sync in the
-    // background, so we tell the user the run was queued — not finished.
-    // Status flips when the next page render reads integration_runs.
     redirect(
-      `/quellen?connected=${encodeURIComponent(providerId === "sharepoint" ? "SharePoint-Sync gestartet" : "Google-Drive-Sync gestartet")}`,
+      `/quellen?connected=${encodeURIComponent(providerId === "sharepoint" ? "SharePoint synchronisiert" : "Google Drive synchronisiert")}`,
     );
   }
 }
@@ -185,7 +182,7 @@ export async function reconcileConnector(
   if (errorMessage) {
     redirect(`/quellen?error=${encodeURIComponent(errorMessage)}`);
   } else {
-    redirect(`/quellen?connected=${encodeURIComponent("Aufräumen gestartet")}`);
+    redirect(`/quellen?connected=${encodeURIComponent("Aufräumen abgeschlossen")}`);
   }
 }
 

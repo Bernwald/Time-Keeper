@@ -143,26 +143,17 @@ Deno.serve(async (req) => {
   const action = body.action ?? "delta-sync";
   const supabase = getServiceClient();
 
-  // Per-org explicit. Manual triggers run as background tasks via
-  // EdgeRuntime.waitUntil so the "Jetzt synchronisieren" button doesn't
-  // block the user for the full duration of an initial sync. The result
-  // lands in integration_runs / organization_integrations and the UI polls.
+  // Per-org explicit
   if (body.organization_id) {
-    const orgId = body.organization_id;
-    const work = (async () => {
-      try {
-        await syncOrg(orgId, action === "initial-sync" ? "initial" : "delta");
-      } catch (err) {
-        console.error("[connector-sharepoint] background run failed:", err);
-      }
-    })();
-
-    type ER = { waitUntil?: (p: Promise<unknown>) => void };
-    const runtime = (globalThis as unknown as { EdgeRuntime?: ER }).EdgeRuntime;
-    if (runtime?.waitUntil) {
-      runtime.waitUntil(work);
+    try {
+      const result = await syncOrg(
+        body.organization_id,
+        action === "initial-sync" ? "initial" : "delta",
+      );
+      return jsonResponse(result);
+    } catch (err) {
+      return errorResponse(err instanceof Error ? err.message : String(err), 500);
     }
-    return jsonResponse({ queued: true, action }, 202);
   }
 
   // Cron path: every active org with this provider gets a delta sync
