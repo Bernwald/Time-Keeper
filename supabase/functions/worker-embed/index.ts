@@ -11,12 +11,15 @@
 // processed an entity it is immediately available to the AI layer.
 
 import { getServiceClient, jsonResponse, errorResponse } from "../_shared/supabase.ts";
-import { readBatch, ack, deadLetter, enqueue } from "../_shared/queue.ts";
+import { readBatch, ack, deadLetter, enqueue, queueLength } from "../_shared/queue.ts";
 import { embedText } from "../_shared/embeddings.ts";
 import { chunkText, chunkTabularText, chunkVerticalText } from "../_shared/chunking.ts";
 
 const QUEUE                = "embed";
-const VISIBILITY_TIMEOUT   = 120;
+// Visibility timeout must exceed worst-case batch wall time so the next
+// cron tick (2 min) does not re-read messages this worker is still
+// processing. Worst case = BATCH_SIZE * ~60s embed-API call.
+const VISIBILITY_TIMEOUT   = 300;
 const BATCH_SIZE           = 5;
 const MAX_ATTEMPTS_PER_MSG = 5;
 // Hard cap on total characters per source before chunking. Must stay within
@@ -46,6 +49,13 @@ interface EmbedMsg {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
+
+  // Conditional polling: skip the heavier pgmq.read + embedding pipeline
+  // when the queue is empty. Most cron ticks at steady state hit this path.
+  const pending = await queueLength(QUEUE);
+  if (pending === 0) {
+    return jsonResponse({ skipped: "queue empty", processed: 0, failed: 0, batch: 0 });
+  }
 
   const supabase = getServiceClient();
   const messages = await readBatch<EmbedMsg>(QUEUE, VISIBILITY_TIMEOUT, BATCH_SIZE);
