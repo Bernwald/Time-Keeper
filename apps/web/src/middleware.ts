@@ -61,6 +61,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(target);
   }
 
+  // Dev-only test-login endpoint must bypass the auth gate so it can run the
+  // sign-in itself. The route handler hard-disables outside development.
+  if (pathname.startsWith("/api/dev/")) {
+    return supabaseResponse;
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -63,21 +63,48 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 
 ### Entwicklung (Claude fuehrt aus)
 
-1. **Worktree + Feature-Branch anlegen** (ausserhalb des Hauptrepos, von `origin/main`).
+1. **Worktree + Feature-Branch anlegen** (ausserhalb des Hauptrepos, von `origin/main`). `.env.local` aus Hauptrepo in den Worktree kopieren (sie ist gitignored und wandert nicht automatisch mit).
 2. **Code schreiben + aendern** im Worktree.
-3. **Qualitaetspruefung (Pflicht vor jedem Push):**
+3. **Autonomer Dev-Loop bis Smoke-Test gruen** (siehe naechster Abschnitt). Pflicht vor jedem Push:
    - `npm run typecheck --workspace apps/web`
    - `npm run lint --workspace apps/web`
-   - Bei groesseren Aenderungen: `npm run build --workspace apps/web`
-   - Bei UI-Aenderungen: Dev-Server starten + Preview-Tools fuer visuelle Pruefung
+   - Dev-Server starten und Smoke-Test laufen lassen (Login + golden path)
+   - Bei Fehlern: lesen, fixen, re-run — bis zu den Eskalationsgrenzen
+   - Bei groesseren Aenderungen zusaetzlich `npm run build --workspace apps/web`
    - Security-Check
 4. **Commit + Push auf den Feature-Branch** (`git push -u origin <branch>`). **Niemals auf `main`.**
-5. **PR oeffnen** via `gh pr create --base main` mit Titel + kurzer Test-Plan-Checkliste.
-6. **Vercel Preview-URL** (von Vercel automatisch pro PR) an den User melden.
+5. **PR oeffnen** via `gh pr create --base main` mit Titel + Test-Plan-Checkliste.
+6. **Vercel Preview-URL** (von Vercel automatisch pro PR) an den User melden — **erst dann uebernimmt der User**.
 7. **User testet Preview** → gibt Freigabe oder Feedback.
 8. Bei Feedback: zurueck zu Schritt 2 im selben Worktree.
 9. **Nach User-Freigabe:** PR mergen (Squash empfohlen) → Vercel deployt automatisch nach Production.
-10. **Aufraeumen:** Worktree entfernen, lokalen Branch loeschen, im Hauptrepo `git pull` auf `main`.
+10. **Auto-Cleanup (immer):** Worktree entfernen, lokalen Branch loeschen, im Hauptrepo `git pull` auf `main`. User-Bestaetigung dafuer ist nicht noetig.
+
+### Autonomer Dev-Loop (Schritt 3 in Detail)
+
+**Ziel:** Bis zum PR ist der User raus. Claude iteriert selbst, bis der Smoke-Test gruen ist.
+
+**Setup pro Worktree (einmalig):**
+- Port-Vergabe: `node scripts/dev-loop/dev-port.mjs` → stabiler Port pro Branch (Hauptrepo `main` = 3000, alle Feature-Branches `3100..3999`).
+- Dev-Server starten: `PORT=$(node scripts/dev-loop/dev-port.mjs) npm run dev --workspace apps/web` als Background-Task.
+- Smoke-Test laufen: `DEV_PORT=$(node scripts/dev-loop/dev-port.mjs) npx playwright test e2e/smoke.spec.ts`
+
+**Test-Daten — Sandbox-Org `claude-test`:**
+- Org-ID: `c20b8a68-363c-4df9-9409-bbf1a881b072` (Slug `claude-test`, Name `[CLAUDE-TEST] Sandbox`).
+- Tester-Login: `claude-tester@bernwald.net` / `Test1234!` (Rolle `admin`, `is_default=true`).
+- Setup neu/idempotent: `node --env-file=apps/web/.env.local scripts/dev-loop/setup-test-org.mjs`
+- Aufraeumen nach jedem Iterationsblock: `node --env-file=apps/web/.env.local scripts/dev-loop/cleanup-test-org.mjs` — wischt alle org-gescopeten Tabellen, laesst Org/User/Profile/Member stehen.
+- **Niemals gegen `time-keeper` (Prod-Org) testen.** Cleanup-Skript verweigert das aktiv.
+
+**Login im Test:** `GET /api/dev/test-login?user=claude-tester&next=/<ziel>` setzt das Supabase-Cookie und redirected. Endpoint ist hard-disabled wenn `NODE_ENV !== "development"` (gibt 404).
+
+**Eskalation an User (Loop sofort stoppen, kurz melden):**
+- Mehr als **5 Iterationen** fuer denselben Bug
+- Mehr als **20 Minuten** ohne gruenen Smoke-Test
+- TypeCheck nach Fix zweimal in Folge mit demselben Error
+- Endpoint liefert 5xx (DB/Infra-Verdacht)
+- Migration noetig (`supabase/migrations/*.sql`) — DB-Push immer User-bestaetigt
+- Fehlende Env-Variable (z. B. `ANTHROPIC_API_KEY` ist lokal optional, fehlt aber bei Chat-Features)
 
 ### Supabase (separater Lifecycle)
 
@@ -92,12 +119,31 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 
 ## Env-Variablen
 
+Pflicht in `apps/web/.env.local` (per `npx vercel env pull` ziehbar):
+
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_APP_URL=http://localhost:3000   # lokal IMMER localhost, sonst brechen Auth-Callbacks
 DEFAULT_ORGANIZATION_SLUG=time-keeper
-NEXT_PUBLIC_APP_URL=
+OPENAI_RESEARCH_TIMEKEEPER_KEY=             # bevorzugt; OPENAI_API_KEY ist Fallback
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=
+NEXT_PUBLIC_VAPI_PUBLIC_KEY=
+VAPI_API_KEY=
+VAPI_SECRET=
+VAPI_SERVER_URL=
+```
+
+Optional / situativ:
+
+```
+ANTHROPIC_API_KEY=          # in Vercel NICHT gesetzt; Edge-Functions ziehen ihn aus Supabase Secrets.
+                            # Lokal nur fuer Chat-Features noetig — aus console.anthropic.com kopieren.
 ```
 
 ## Sub-Dokumentation
