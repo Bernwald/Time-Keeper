@@ -60,7 +60,10 @@ export async function triggerInitialSync(
       },
       body: JSON.stringify({ action: "initial-sync", organization_id: orgId }),
     });
-    if (!res.ok) {
+    if (res.status === 409) {
+      errorMessage =
+        "Synchronisation läuft bereits. Bitte warte kurz, bis der laufende Vorgang abgeschlossen ist.";
+    } else if (!res.ok) {
       const body = await res.text();
       errorMessage = `Sync fehlgeschlagen (${res.status}): ${body.slice(0, 200)}`;
       console.error("[triggerInitialSync]", providerId, res.status, body);
@@ -155,6 +158,9 @@ export async function reconcileConnector(
         },
         body: JSON.stringify({ action, organization_id: orgId }),
       });
+      if (res.status === 409) {
+        return "Synchronisation läuft bereits. Bitte warte kurz, bis der laufende Vorgang abgeschlossen ist.";
+      }
       if (!res.ok) {
         const body = await res.text();
         console.error("[reconcileConnector]", action, res.status, body);

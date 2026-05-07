@@ -50,7 +50,34 @@ async function getValidAccessToken(row: IntegrationRow): Promise<string> {
   return refreshed.access_token;
 }
 
-async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknown> {
+// Acquire-or-throw helper. The 409-style error is recognized by callers and
+// surfaced to the user as "Sync läuft bereits" instead of a stack trace.
+class SyncLockedError extends Error {
+  constructor() { super("sync already running for this integration"); this.name = "SyncLockedError"; }
+}
+
+async function withSyncLock<T>(orgId: string, owner: string, fn: () => Promise<T>): Promise<T> {
+  const supabase = getServiceClient();
+  const { data: acquired, error: lockErr } = await supabase.rpc("try_acquire_sync_lock", {
+    p_org_id:      orgId,
+    p_provider_id: PROVIDER_ID,
+    p_owner:       owner,
+  });
+  if (lockErr) throw lockErr;
+  if (!acquired) throw new SyncLockedError();
+  try {
+    return await fn();
+  } finally {
+    try {
+      await supabase.rpc("release_sync_lock", { p_org_id: orgId, p_provider_id: PROVIDER_ID });
+    } catch (releaseErr) {
+      console.error("[connector-sharepoint] release_sync_lock failed", releaseErr);
+    }
+  }
+}
+
+async function syncOrg(orgId: string, mode: "initial" | "delta", trigger: string): Promise<unknown> {
+  return await withSyncLock(orgId, `${mode}-sync:${trigger}`, async () => {
   const supabase = getServiceClient();
   const { data: row, error } = await supabase
     .from("organization_integrations")
@@ -114,6 +141,7 @@ async function syncOrg(orgId: string, mode: "initial" | "delta"): Promise<unknow
       return records;
     },
   });
+  });
 }
 
 Deno.serve(async (req) => {
@@ -126,7 +154,8 @@ Deno.serve(async (req) => {
     body = {};
   }
 
-  const action = body.action ?? "delta-sync";
+  const action  = body.action  ?? "delta-sync";
+  const trigger = body.trigger ?? "manual";
   const supabase = getServiceClient();
 
   // Per-org explicit
@@ -135,9 +164,13 @@ Deno.serve(async (req) => {
       const result = await syncOrg(
         body.organization_id,
         action === "initial-sync" ? "initial" : "delta",
+        trigger,
       );
       return jsonResponse(result);
     } catch (err) {
+      if (err instanceof SyncLockedError) {
+        return jsonResponse({ skipped: "sync already running" }, 409);
+      }
       return errorResponse(err instanceof Error ? err.message : String(err), 500);
     }
   }
@@ -152,9 +185,13 @@ Deno.serve(async (req) => {
   const results: unknown[] = [];
   for (const r of (rows ?? []) as { organization_id: string }[]) {
     try {
-      results.push(await syncOrg(r.organization_id, "delta"));
+      results.push(await syncOrg(r.organization_id, "delta", trigger));
     } catch (err) {
-      results.push({ organization_id: r.organization_id, error: err instanceof Error ? err.message : String(err) });
+      if (err instanceof SyncLockedError) {
+        results.push({ organization_id: r.organization_id, skipped: "sync already running" });
+      } else {
+        results.push({ organization_id: r.organization_id, error: err instanceof Error ? err.message : String(err) });
+      }
     }
   }
   return jsonResponse({ runs: results });
