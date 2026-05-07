@@ -43,52 +43,57 @@ export type CalendarEvent = {
 
 // ─── TOKEN MANAGEMENT ────────────────────────────────────────────────────────
 
+// Throws a structured Error if Google rejects the refresh. Surfaces the
+// concrete `error` + `error_description` from Google's response (e.g.
+// `invalid_grant: Token has been expired or revoked`) so the UI on /quellen
+// can show a precise reason instead of a generic "token refresh failed".
 export async function refreshAccessToken(
   refreshToken: string,
   orgId?: string,
-): Promise<{ access_token: string; expires_at: Date } | null> {
-  try {
-    // Use org-specific credentials if orgId provided, else global env vars
-    let clientId: string;
-    let clientSecret: string;
-    if (orgId) {
-      const creds = await getGoogleCredsForOrg(orgId);
-      clientId = creds.clientId;
-      clientSecret = creds.clientSecret;
-    } else {
-      clientId = getGoogleClientId();
-      clientSecret = getGoogleClientSecret();
-    }
-
-    const response = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[calendar] Token refresh error:", response.status, errText);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log("[calendar] Token refreshed, expires_in:", data.expires_in);
-    const expiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
-
-    return {
-      access_token: data.access_token,
-      expires_at: expiresAt,
-    };
-  } catch (err) {
-    console.error("Google token refresh failed:", err);
-    return null;
+): Promise<{ access_token: string; expires_at: Date }> {
+  let clientId: string;
+  let clientSecret: string;
+  if (orgId) {
+    const creds = await getGoogleCredsForOrg(orgId);
+    clientId = creds.clientId;
+    clientSecret = creds.clientSecret;
+  } else {
+    clientId = getGoogleClientId();
+    clientSecret = getGoogleClientSecret();
   }
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = body.slice(0, 300);
+    try {
+      const parsed = JSON.parse(body) as { error?: string; error_description?: string };
+      if (parsed.error || parsed.error_description) {
+        detail = [parsed.error, parsed.error_description].filter(Boolean).join(": ").slice(0, 400);
+      }
+    } catch { /* keep raw text */ }
+    console.error("[calendar] Token refresh error:", response.status, body);
+    throw new Error(`google token refresh failed (${response.status}): ${detail}`);
+  }
+
+  const data = await response.json();
+  console.log("[calendar] Token refreshed, expires_in:", data.expires_in);
+  const expiresAt = new Date(Date.now() + (data.expires_in - 60) * 1000);
+
+  return {
+    access_token: data.access_token,
+    expires_at: expiresAt,
+  };
 }
 
 // ─── AVAILABLE SLOTS ─────────────────────────────────────────────────────────

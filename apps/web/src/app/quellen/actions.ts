@@ -79,7 +79,9 @@ export async function triggerInitialSync(
   if (errorMessage) {
     redirect(`/quellen?error=${encodeURIComponent(errorMessage)}`);
   } else {
-    redirect(`/quellen?connected=${encodeURIComponent(providerId === "sharepoint" ? "SharePoint synchronisiert" : "Google Drive synchronisiert")}`);
+    redirect(
+      `/quellen?connected=${encodeURIComponent(providerId === "sharepoint" ? "SharePoint synchronisiert" : "Google Drive synchronisiert")}`,
+    );
   }
 }
 
@@ -234,6 +236,7 @@ export async function saveSharepointTokens(tokens: {
   // Preserve last_synced_at on reconnect. An OAuth refresh shouldn't wipe
   // the sync history — that's what made /quellen render "noch nie
   // synchronisiert" for integrations that were clearly syncing before.
+  // error_message is reset so the previous failure stops being surfaced.
   const { error } = await db
     .from("organization_integrations")
     .upsert(
@@ -241,6 +244,7 @@ export async function saveSharepointTokens(tokens: {
         organization_id: orgId,
         provider_id: "sharepoint",
         status: "active",
+        error_message: null,
         credential_mode: "platform",
         credentials: {
           refresh_token: tokens.refresh_token,
@@ -273,6 +277,7 @@ export async function saveGdriveTokens(tokens: {
         organization_id: orgId,
         provider_id: "google_drive",
         status: "active",
+        error_message: null,
         credential_mode: "platform",
         credentials: {
           refresh_token: tokens.refresh_token,

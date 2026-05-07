@@ -2,9 +2,15 @@ import { redirect } from "next/navigation";
 import { createUserClient, getUser } from "@/lib/db/supabase-server";
 import { requireOrgId } from "@/lib/db/org-context";
 import { card, btn, page, styles } from "@/components/ui/table-classes";
-import { connectSharepoint, connectGdrive, triggerInitialSync } from "./actions";
+import { connectSharepoint, connectGdrive } from "./actions";
 import { AutoRefreshWhileSyncing } from "./auto-refresh";
-import { RetryButton, ReindexButton, DeleteButton, ReconcileButton } from "./retry-button";
+import {
+  RetryButton,
+  ReindexButton,
+  DeleteButton,
+  ReconcileButton,
+  SyncButton,
+} from "./retry-button";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +18,7 @@ type Integration = {
   provider_id: string;
   status: string;
   last_synced_at: string | null;
+  error_message: string | null;
   config: Record<string, unknown> | null;
 };
 
@@ -123,7 +130,7 @@ export default async function QuellenPage({
 
   const { data: integrationsRaw } = await db
     .from("organization_integrations")
-    .select("provider_id, status, last_synced_at, config")
+    .select("provider_id, status, last_synced_at, error_message, config")
     .eq("organization_id", orgId)
     .in("provider_id", ["sharepoint", "google_drive"]);
   const integrations = (integrationsRaw ?? []) as Integration[];
@@ -214,16 +221,25 @@ function ConnectorCard(props: {
 }) {
   const { providerId, integration, files, stats } = props;
   const isActive = integration?.status === "active";
+  const isErrored = integration?.status === "error";
+  // Sync-side errors (e.g. SharePoint Online license missing, Drive 403) leave
+  // status='active' because the OAuth refresh itself worked, but the run still
+  // failed. error_message captures the reason — surface it as a warning.
+  const hasRunError = isActive && Boolean(integration?.error_message);
   const inFlight = stats.processing + stats.pending;
   const isSyncing = isActive && inFlight > 0;
 
   const lastSyncedAt = integration?.last_synced_at ?? null;
-  const isStale = isActive && !isSyncing && isSyncStale(lastSyncedAt);
+  const isStale = isActive && !isSyncing && !hasRunError && isSyncStale(lastSyncedAt);
 
   type Health = { kind: "ok" | "sync" | "warn" | "idle"; label: string };
   let health: Health;
-  if (!isActive) {
+  if (isErrored) {
+    health = { kind: "warn", label: "Token-Refresh fehlgeschlagen" };
+  } else if (!isActive) {
     health = { kind: "warn", label: integration ? "Token abgelaufen" : "nicht verbunden" };
+  } else if (hasRunError) {
+    health = { kind: "warn", label: "Sync-Lauf gescheitert" };
   } else if (isSyncing) {
     health = { kind: "sync", label: `Sync läuft… ${stats.indexed} / ${stats.total}` };
   } else if (stats.failed > 0) {
@@ -258,7 +274,38 @@ function ConnectorCard(props: {
 
   return (
     <div className={card.flat} style={styles.panel}>
-      {isStale && (
+      {isErrored && (
+        <div
+          className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
+          style={{ background: "var(--color-danger-soft, #fee)", color: "var(--color-danger, #c00)" }}
+        >
+          <span aria-hidden>⚠️</span>
+          <div className="min-w-0">
+            <p className="font-medium">Token-Refresh fehlgeschlagen.</p>
+            <p className="mt-1 break-words">
+              {integration?.error_message ??
+                "Der gespeicherte Refresh-Token wurde von der Gegenstelle abgelehnt."}
+            </p>
+            <p className="mt-1">
+              Klicke <strong>Erneut verbinden</strong> und durchlaufe den
+              OAuth-Flow neu — danach läuft der Sync wieder.
+            </p>
+          </div>
+        </div>
+      )}
+      {!isErrored && hasRunError && (
+        <div
+          className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
+          style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}
+        >
+          <span aria-hidden>⚠️</span>
+          <div className="min-w-0">
+            <p className="font-medium">Letzter Sync-Lauf ist gescheitert.</p>
+            <p className="mt-1 break-words">{integration?.error_message}</p>
+          </div>
+        </div>
+      )}
+      {!isErrored && !hasRunError && isStale && (
         <div
           className="rounded-[var(--radius-md)] p-3 text-sm mb-4 flex items-start gap-2"
           style={{ background: "var(--color-warning-soft, #fff7e6)", color: "var(--color-warning, #9a6a00)" }}
@@ -297,16 +344,12 @@ function ConnectorCard(props: {
           {!isActive ? (
             <form action={props.connectAction}>
               <button type="submit" className={btn.primary} style={styles.accent}>
-                Verbinden
+                {integration ? "Erneut verbinden" : "Verbinden"}
               </button>
             </form>
           ) : (
             <>
-              <form action={triggerInitialSync.bind(null, providerId)}>
-                <button type="submit" className={btn.secondary} style={styles.panel}>
-                  Jetzt synchronisieren
-                </button>
-              </form>
+              <SyncButton providerId={providerId} />
               {providerId === "google_drive" && <ReconcileButton providerId={providerId} />}
             </>
           )}

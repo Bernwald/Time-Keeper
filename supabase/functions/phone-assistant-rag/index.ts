@@ -872,9 +872,17 @@ async function getCalendarAccessToken(
     }
   }
 
-  // Refresh the token (pass orgId for org-aware credentials)
-  const result = await refreshAccessToken(config.refresh_token, orgId);
-  if (!result) return null;
+  // Refresh the token (pass orgId for org-aware credentials). The phone
+  // assistant runs on every voice call and must degrade gracefully when the
+  // calendar token can't be refreshed — keep the null-return contract by
+  // catching here. The reason is logged for triage.
+  let result: Awaited<ReturnType<typeof refreshAccessToken>>;
+  try {
+    result = await refreshAccessToken(config.refresh_token, orgId);
+  } catch (err) {
+    console.error("[phone-rag] calendar token refresh failed:", err);
+    return null;
+  }
 
   // Store the new token in DB
   const db = getServiceClient();

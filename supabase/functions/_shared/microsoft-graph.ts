@@ -18,41 +18,48 @@ function tokenUrl(tenantId: string): string {
   return `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
 }
 
+// Throws a structured Error if Microsoft rejects the refresh. The message
+// includes the AADSTS code + description from Microsoft so callers (and the
+// UI on /quellen) can distinguish `invalid_client` (rotated/expired client
+// secret) from `invalid_grant` (refresh_token expired) at a glance.
 export async function refreshMicrosoftAccessToken(
   refreshToken: string,
   orgId: string,
-): Promise<{ access_token: string; refresh_token?: string; expires_at: Date } | null> {
-  try {
-    const { clientId, clientSecret, tenantId } = await getMicrosoftCredsForOrg(orgId);
+): Promise<{ access_token: string; refresh_token?: string; expires_at: Date }> {
+  const { clientId, clientSecret, tenantId } = await getMicrosoftCredsForOrg(orgId);
 
-    const res = await fetch(tokenUrl(tenantId), {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-        scope: "offline_access Files.ReadWrite.All Sites.ReadWrite.All",
-      }),
-    });
+  const res = await fetch(tokenUrl(tenantId), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+      scope: "offline_access Files.ReadWrite.All Sites.ReadWrite.All",
+    }),
+  });
 
-    if (!res.ok) {
-      console.error("[graph] token refresh:", res.status, await res.text());
-      return null;
-    }
-
-    const data = await res.json();
-    const expiresAt = new Date(Date.now() + ((data.expires_in ?? 3600) - 60) * 1000);
-    return {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: expiresAt,
-    };
-  } catch (err) {
-    console.error("[graph] token refresh failed:", err);
-    return null;
+  if (!res.ok) {
+    const body = await res.text();
+    let detail = body.slice(0, 300);
+    try {
+      const parsed = JSON.parse(body) as { error?: string; error_description?: string };
+      if (parsed.error || parsed.error_description) {
+        detail = [parsed.error, parsed.error_description].filter(Boolean).join(": ").slice(0, 400);
+      }
+    } catch { /* keep raw text */ }
+    console.error("[graph] token refresh:", res.status, body);
+    throw new Error(`microsoft token refresh failed (${res.status}): ${detail}`);
   }
+
+  const data = await res.json();
+  const expiresAt = new Date(Date.now() + ((data.expires_in ?? 3600) - 60) * 1000);
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: expiresAt,
+  };
 }
 
 export type DriveItem = {

@@ -49,8 +49,9 @@ async function getValidAccessToken(row: CalendarRow): Promise<string> {
     throw new Error("calendar_integrations row has no refresh_token");
   }
 
+  // refreshAccessToken throws with the concrete Google error_description on
+  // failure (e.g. invalid_grant). Let it propagate.
   const refreshed = await refreshAccessToken(row.refresh_token, row.organization_id);
-  if (!refreshed) throw new Error("Google token refresh failed");
 
   // Persist the new token for the next invocation.
   const supabase = getServiceClient();
