@@ -176,6 +176,29 @@ export async function listConversations(limit = 50): Promise<ConversationListIte
   return (data ?? []) as ConversationListItem[];
 }
 
+/**
+ * Conversations des eingeloggten Users (created_by = auth.uid()).
+ * HAIway ist ein Generierungs-Tool, kein Kollaborations-Tool — Chats sind
+ * persönlich. Berater/Owner haben über die org-weite listConversations()
+ * weiterhin Audit-Sicht für KPI-Zwecke.
+ */
+export async function listMyConversations(limit = 50): Promise<ConversationListItem[]> {
+  const orgId = await requireOrgId();
+  const db = await createUserClient();
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await db
+    .from("chat_conversations")
+    .select("id, title, last_message_at, model")
+    .eq("organization_id", orgId)
+    .eq("created_by", user.id)
+    .is("archived_at", null)
+    .order("last_message_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ConversationListItem[];
+}
+
 export async function getConversation(id: string): Promise<{
   conversation: ConversationListItem;
   messages: StoredMessage[];

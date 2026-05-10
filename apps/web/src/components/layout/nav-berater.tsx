@@ -10,29 +10,19 @@ import {
   IconBuilding,
   NavLink,
   NavGroupBlock,
-  NavLogout,
   type NavGroup,
 } from "./nav-primitives";
 
 /**
- * Berater-Cockpit-Sidebar — Kunden-Admin (organization_members.role IN ('admin','owner')).
+ * Berater-Sidebar — Kunden-Admin (organization_members.role IN ('admin','owner')).
  * Konfiguriert pro Kunden-Org: Datenpools, Berechtigungen, KPIs, Integrationen.
- *
- * Phase 1: Stub-Routen verlinken auf vorhandene Verwaltungsseiten.
- * Sprint C zieht die echten Berater-Pfade unter (berater)/admin/*.
  */
 export function NavBerater({ hasPhoneAssistant }: { hasPhoneAssistant?: boolean }) {
   const groups: NavGroup[] = [
     {
-      label: "Kunde",
-      items: [
-        { href: "/admin/mein-unternehmen", label: "Übersicht", icon: IconBuilding },
-      ],
-    },
-    {
       label: "Daten & Zugriff",
       items: [
-        { href: "/quellen", label: "Quellen-Pools", icon: IconSources },
+        { href: "/admin/daten", label: "Datenpools", icon: IconSources },
         { href: "/berechtigungen", label: "Berechtigungen", icon: IconShield },
       ],
     },
@@ -45,7 +35,8 @@ export function NavBerater({ hasPhoneAssistant }: { hasPhoneAssistant?: boolean 
     {
       label: "System",
       items: [
-        { href: "/admin/integrationen", label: "Integrationen", icon: IconPlug },
+        { href: "/admin/integrationen", label: "Datenquellen + Sync", icon: IconPlug },
+        { href: "/admin/branding", label: "Branding", icon: IconBuilding },
         ...(hasPhoneAssistant
           ? [{ href: "/telefon-assistent", label: "Telefon", icon: IconPhone }]
           : []),
@@ -54,14 +45,13 @@ export function NavBerater({ hasPhoneAssistant }: { hasPhoneAssistant?: boolean 
   ];
 
   return (
-    <nav className="flex flex-col gap-6">
+    <nav className="flex flex-col gap-6 p-3 py-4">
       <div>
         <NavLink item={{ href: "/", label: "Übersicht", icon: IconHome }} exact />
       </div>
-      {groups.map((group) => (
-        <NavGroupBlock key={group.label} group={group} />
+      {groups.map((g) => (
+        <NavGroupBlock key={g.label} group={g} />
       ))}
-      <NavLogout />
     </nav>
   );
 }

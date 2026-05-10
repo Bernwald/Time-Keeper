@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveSharepointTokens } from "@/app/quellen/actions";
+import { saveSharepointTokens, triggerInitialSync } from "@/app/quellen/actions";
 import { getAppUrl } from "@/lib/app-url";
 
 export async function GET(req: Request) {
@@ -61,5 +61,14 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL(`/quellen?error=save:${msg}`, req.url));
   }
 
-  return NextResponse.redirect(new URL("/quellen?connected=sharepoint", req.url));
+  // Initial-Sync direkt nach OAuth-Connect — gleiche Logik wie beim
+  // gdrive-Callback. triggerInitialSync redirected selbst.
+  try {
+    await triggerInitialSync("sharepoint");
+  } catch (e) {
+    if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e;
+    console.error("[sharepoint callback] initial-sync failed:", e);
+    return NextResponse.redirect(new URL("/admin/integrationen?connected=sharepoint&sync_error=1", req.url));
+  }
+  return NextResponse.redirect(new URL("/admin/integrationen?connected=sharepoint", req.url));
 }

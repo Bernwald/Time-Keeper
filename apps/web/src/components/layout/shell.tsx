@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MobileNav } from "./nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Wordmark } from "./wordmark";
 import type { OrgBranding } from "@/lib/db/queries/organization";
 import type { ReactNode } from "react";
 
@@ -37,12 +38,11 @@ export function Shell({ children, branding, nav, mobileNav }: ShellProps) {
               {shortName}
             </div>
             <div className="flex flex-col">
-              <span
+              <Wordmark
+                name={displayName}
                 className="text-[15px] font-semibold leading-tight"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-              >
-                {displayName}
-              </span>
+              />
               <span className="text-[11px] leading-tight" style={{ color: "var(--color-placeholder)" }}>
                 Knowledge Platform
               </span>
@@ -81,12 +81,11 @@ export function Shell({ children, branding, nav, mobileNav }: ShellProps) {
           >
             {shortName}
           </div>
-          <span
+          <Wordmark
+            name={displayName}
             className="text-sm font-semibold"
             style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-          >
-            {displayName}
-          </span>
+          />
         </Link>
         <div className="flex items-center gap-1">
           <ThemeToggle />

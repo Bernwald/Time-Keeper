@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, DM_Sans } from "next/font/google";
 import "./globals.css";
-import { Shell } from "@/components/layout/shell";
+import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { NavWorkspace } from "@/components/layout/nav-workspace";
 import { NavBerater } from "@/components/layout/nav-berater";
 import { NavHaiway } from "@/components/layout/nav-haiway";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { getSession } from "@/lib/db/supabase-server";
-import { getOrgBranding, isPlatformAdmin } from "@/lib/db/queries/organization";
+import { createUserClient, getSession } from "@/lib/db/supabase-server";
+import { getOrgBranding, getOrganization, isPlatformAdmin } from "@/lib/db/queries/organization";
 import { getMemberRole } from "@/lib/db/org-context";
 import { hasFeature } from "@/lib/features/flags";
 
@@ -30,7 +30,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "HAIway",
+  title: "hAIway",
   description: "AI-Ready Knowledge & Operations Platform",
 };
 
@@ -41,16 +41,18 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const user = session?.user ?? null;
 
   let branding = undefined;
-  let hasPhoneAssistant = false;
   let persona: Persona = "workspace";
+  let userName: string | null = null;
+  let contextLabel: string | null = null;
+  let hasPhoneAssistant = false;
 
   if (user) {
     try {
-      const [b, platformAdmin, phoneFlag, role] = await Promise.all([
+      const [b, platformAdmin, role, phoneFlag] = await Promise.all([
         getOrgBranding(),
         isPlatformAdmin(),
-        hasFeature("phone_assistant"),
         getMemberRole(),
+        hasFeature("phone_assistant"),
       ]);
       branding = b;
       hasPhoneAssistant = phoneFlag;
@@ -62,12 +64,23 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       } else {
         persona = "workspace";
       }
+
+      const db = await createUserClient();
+      const { data } = await db.from("profiles").select("full_name").eq("id", user.id).single();
+      userName = data?.full_name ?? null;
+
+      if (persona === "berater") {
+        const org = await getOrganization().catch(() => null);
+        contextLabel = org?.name?.replace(/^\[[^\]]+\]\s*/, "").trim() || null;
+      } else if (persona === "haiway") {
+        contextLabel = "Intern";
+      }
     } catch {
-      // User may not have org membership yet (onboarding)
+      // User has no org membership yet (onboarding)
     }
   }
 
-  const nav =
+  const sidebar =
     persona === "haiway" ? (
       <NavHaiway />
     ) : persona === "berater" ? (
@@ -87,12 +100,17 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         <AuthProvider initialUser={user}>
-          {user ? (
-            <Shell branding={branding} nav={nav}>
-              {children}
-            </Shell>
-          ) : (
+          {!user ? (
             children
+          ) : (
+            <WorkspaceShell
+              branding={branding}
+              userName={userName}
+              contextLabel={contextLabel}
+              sidebar={sidebar}
+            >
+              {children}
+            </WorkspaceShell>
           )}
         </AuthProvider>
       </body>

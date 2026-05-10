@@ -77,7 +77,10 @@ function relativeTime(iso: string | null): string {
 
 // Cron runs every 5 min. Anything older than 15 min (3 intervals) with no
 // in-flight work means the scheduler is lagging or the last run crashed.
-const SYNC_STALE_MS = 15 * 60 * 1000;
+// 30 Min — passt zur gedrosselten Cron-Frequenz seit IO-Vorfall 05/2026
+// (siehe feedback_pipeline_architecture). 15 Min war für die alte alle-5-Min-
+// Cron-Konfiguration eng kalibriert und schlägt seitdem dauernd Fehlalarm.
+const SYNC_STALE_MS = 30 * 60 * 1000;
 function isSyncStale(iso: string | null): boolean {
   if (!iso) return true;
   return Date.now() - new Date(iso).getTime() > SYNC_STALE_MS;

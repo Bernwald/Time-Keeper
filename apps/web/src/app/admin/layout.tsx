@@ -1,45 +1,25 @@
 import { redirect } from "next/navigation";
 import { isPlatformAdmin } from "@/lib/db/queries/organization";
-import Link from "next/link";
+import { getMemberRole } from "@/lib/db/org-context";
 
-const adminNav = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/mein-unternehmen", label: "Mein Unternehmen" },
-  { href: "/admin/kunden", label: "Kunden" },
-  { href: "/admin/integrationen", label: "Integrationen" },
-  { href: "/admin/retrieval-qualitaet", label: "Retrieval-Qualität" },
-];
-
+/**
+ * /admin/* — Pages, die HAIway-internes Dashboard heute halten und parallel
+ * vom Berater-Cockpit als Sub-Seiten genutzt werden (Integrationen,
+ * Retrieval-Qualität, Branding, …). Gate auf Platform-Admin ODER Berater
+ * (`role IN ('admin','owner')`); End-User landen auf /.
+ *
+ * Layout selbst rendert nur das Gate. Die Top-Bar + Tabs kommen aus dem
+ * Root-Layout über die Persona-spezifische `WorkspaceShell`-Variante; ein
+ * eigenes Tab-Banner hier hätte sich doppelt mit der Shell-Navigation.
+ */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const isAdmin = await isPlatformAdmin();
-  if (!isAdmin) redirect("/");
+  const [admin, role] = await Promise.all([
+    isPlatformAdmin().catch(() => false),
+    getMemberRole().catch(() => null),
+  ]);
+  if (!admin && role !== "admin" && role !== "owner") {
+    redirect("/");
+  }
 
-  return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1
-          className="text-2xl font-semibold mb-4"
-          style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-        >
-          Administration
-        </h1>
-        <nav className="flex gap-1">
-          {adminNav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="min-h-[36px] px-4 rounded-lg text-sm font-medium flex items-center"
-              style={{
-                background: "var(--color-bg-elevated)",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-      {children}
-    </div>
-  );
+  return <div className="px-4 md:px-8 py-6 md:py-10 max-w-6xl mx-auto">{children}</div>;
 }
