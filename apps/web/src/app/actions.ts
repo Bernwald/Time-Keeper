@@ -14,8 +14,6 @@ import {
   recordingSourceSchema,
   importRowSchema,
   sourceLinkSchema,
-  tagSchema,
-  linkTypeSchema,
   validatePdfFile,
   validateAudioFile,
 } from "@/lib/validation/schemas";
@@ -441,110 +439,4 @@ export async function deleteSource(id: string) {
   redirect("/sources");
 }
 
-
-// ─── TAGS ────────────────────────────────────────────────────────────────
-
-export async function createTag(formData: FormData) {
-  const parsed = tagSchema.safeParse({
-    name: formData.get("name"),
-    color: formData.get("color"),
-    category: formData.get("category"),
-  });
-  if (!parsed.success) return;
-
-  const orgId = await requireOrgId();
-  const db = createServiceClient();
-  await db.from("tags").insert({
-    organization_id: orgId,
-    name: parsed.data.name,
-    color: parsed.data.color,
-    category: parsed.data.category,
-  });
-  revalidatePath("/admin/tags");
-}
-
-export async function updateTag(id: string, formData: FormData) {
-  const parsed = tagSchema.safeParse({
-    name: formData.get("name"),
-    color: formData.get("color"),
-    category: formData.get("category"),
-  });
-  if (!parsed.success) return;
-
-  const orgId = await requireOrgId();
-  const db = createServiceClient();
-  await db
-    .from("tags")
-    .update({
-      name: parsed.data.name,
-      color: parsed.data.color,
-      category: parsed.data.category,
-    })
-    .eq("id", id)
-    .eq("organization_id", orgId);
-  revalidatePath("/admin/tags");
-}
-
-export async function deleteTag(id: string) {
-  const orgId = await requireOrgId();
-  const db = createServiceClient();
-  // Verify ownership first, then scope both deletes.
-  const { data: owned } = await db
-    .from("tags")
-    .select("id")
-    .eq("id", id)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!owned) return;
-
-  await db.from("entity_tags").delete().eq("tag_id", id).eq("organization_id", orgId);
-  await db.from("tags").delete().eq("id", id).eq("organization_id", orgId);
-  revalidatePath("/admin/tags");
-}
-
-export async function addEntityTag(
-  tagId: string,
-  entityType: string,
-  entityId: string,
-) {
-  const typeParse = linkTypeSchema.safeParse(entityType);
-  if (!typeParse.success) return;
-
-  const orgId = await requireOrgId();
-  const db = createServiceClient();
-  // Verify tag belongs to caller's org — otherwise they could cross-reference foreign tags.
-  const { data: ownedTag } = await db
-    .from("tags")
-    .select("id")
-    .eq("id", tagId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!ownedTag) return;
-
-  await db.from("entity_tags").upsert(
-    {
-      organization_id: orgId,
-      tag_id: tagId,
-      entity_type: typeParse.data,
-      entity_id: entityId,
-    },
-    { onConflict: "tag_id,entity_type,entity_id" },
-  );
-}
-
-export async function removeEntityTag(
-  tagId: string,
-  entityType: string,
-  entityId: string,
-) {
-  const orgId = await requireOrgId();
-  const db = createServiceClient();
-  await db
-    .from("entity_tags")
-    .delete()
-    .eq("tag_id", tagId)
-    .eq("entity_type", entityType)
-    .eq("entity_id", entityId)
-    .eq("organization_id", orgId);
-}
 

@@ -98,12 +98,6 @@ export const processInstanceSchema = z.object({
 
 export const stepStatusSchema = z.enum(["pending", "in_progress", "completed", "skipped"]);
 
-export const tagSchema = z.object({
-  name: trimmedNonEmpty(100),
-  color: trimmedOptional(32),
-  category: trimmedOptional(100),
-});
-
 export const companySchema = z.object({
   name: trimmedNonEmpty(TITLE_MAX),
   website: trimmedOptional(500),
