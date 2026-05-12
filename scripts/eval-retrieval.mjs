@@ -52,7 +52,7 @@ const args = parseArgs(process.argv.slice(2));
 const PAIRS_PATH = args.pairs ?? "eval/query-pairs.json";
 const TOP_K = Number(args.k ?? 10);
 const WITH_EXPAND = args["no-expand"] !== true;
-const ORG_SLUG = args["org-slug"] ?? process.env.DEFAULT_ORGANIZATION_SLUG ?? "time-keeper";
+const ORG_SLUG = args["org-slug"] ?? process.env.DEFAULT_ORGANIZATION_SLUG ?? "haiway";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

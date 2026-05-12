@@ -25,7 +25,7 @@ export default async function MeinUnternehmenPage() {
           Mein Unternehmen
         </h2>
         <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
-          Verwaltung der internen TimeKeeper-Organisation — Team einladen, Features schalten,
+          Verwaltung der internen hAIway-Organisation — Team einladen, Features schalten,
           Integrationen pflegen.
         </p>
       </div>

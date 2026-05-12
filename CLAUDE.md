@@ -1,4 +1,4 @@
-# TimeKeeper — AI Foundation Platform
+# hAIway — AI Foundation Platform
 
 ## Projekt
 
@@ -48,15 +48,15 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 
 ### Worktree-Konvention
 
-- Hauptrepo (`C:\Users\thoma\Desktop\Coding\Time keeper`) bleibt **immer auf `main`**.
+- Hauptrepo (`C:\Users\thoma\Desktop\Coding\hAIway`) bleibt **immer auf `main`**.
 - Pro Feature ein eigener Worktree unter:
-  `C:\Users\thoma\Desktop\Coding\Time keeper.worktrees\<branch-name>`
+  `C:\Users\thoma\Desktop\Coding\hAIway.worktrees\<branch-name>`
 - Branch-Naming: `feature/<kurz-name>` · `fix/<kurz-name>` · `chore/<kurz-name>`
 - Worktree-Lifecycle:
   ```
-  git worktree add ../Time\ keeper.worktrees/<branch> -b <branch> origin/main
+  git worktree add ../hAIway.worktrees/<branch> -b <branch> origin/main
   # ... arbeiten, committen, pushen, PR mergen ...
-  git worktree remove ../Time\ keeper.worktrees/<branch>
+  git worktree remove ../hAIway.worktrees/<branch>
   git branch -d <branch>
   ```
 - Bei jedem neuen Feature fragt Claude den User: *"Neuer Worktree fuer dieses Feature?"* — und legt ihn nur nach Bestaetigung an.
@@ -94,7 +94,7 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 - Tester-Login: `claude-tester@bernwald.net` / `Test1234!` (Rolle `admin`, `is_default=true`).
 - Setup neu/idempotent: `node --env-file=apps/web/.env.local scripts/dev-loop/setup-test-org.mjs`
 - Aufraeumen nach jedem Iterationsblock: `node --env-file=apps/web/.env.local scripts/dev-loop/cleanup-test-org.mjs` — wischt alle org-gescopeten Tabellen, laesst Org/User/Profile/Member stehen.
-- **Niemals gegen `time-keeper` (Prod-Org) testen.** Cleanup-Skript verweigert das aktiv.
+- **Niemals gegen `haiway` (Prod-Org) testen.** Cleanup-Skript verweigert das aktiv.
 
 **Login im Test:** `GET /api/dev/test-login?user=claude-tester&next=/<ziel>` setzt das Supabase-Cookie und redirected. Endpoint ist hard-disabled wenn `NODE_ENV !== "development"` (gibt 404).
 
@@ -105,6 +105,26 @@ Trivial = Bugfix, Typo, Style-Token-Korrektur, reine Doku-Edits. Alles andere du
 - Endpoint liefert 5xx (DB/Infra-Verdacht)
 - Migration noetig (`supabase/migrations/*.sql`) — DB-Push immer User-bestaetigt
 - Fehlende Env-Variable (z. B. `ANTHROPIC_API_KEY` ist lokal optional, fehlt aber bei Chat-Features)
+
+**Autonomes Iterieren bei externen Setup-Problemen (OAuth, API-Aktivierung, Edge-Function-Secrets):**
+
+Wenn ein Bug von einer User-Aktion ausserhalb der Codebasis abhaengt (z. B. Cloud-Console-Klick, API-Aktivierung), nicht stoppen und warten — autonom polling-loopen, bis es klappt:
+
+1. **MCP-First-Diagnose**: bei „X funktioniert nicht"-Reports erst per Supabase MCP `execute_sql` den DB-Stand pruefen, dann Hypothese formulieren. Kein Raten ohne DB-Check.
+2. **Polling-Loop fuer Re-Check**: Bash mit `run_in_background`, alle 30 s einen Versuch, max 10–15 Min. Jeder Versuch logged exit-status. Bei Erfolg → break + Notify.
+3. **ScheduleWakeup zwischendurch**: alle 2–4 Min selbst aufwachen, DB-Stand + Loop-Output sichten, User informieren wenn Versuch X erfolgreich war oder Loop timeout droht.
+4. **Klarer Direkt-Link fuer User-Action**: bei API-Aktivierung in Cloud-Konsolen oder Test-User-Eintrag → konkreter URL mit Project-ID, kein „geh in die Cloud Console und such".
+5. **Lokal-iterieren-bis-gruen ist Pflicht** fuer UI-Arbeit: kein PR vor visueller User-Abnahme der Optik (siehe `feedback_local_iteration_first`).
+
+**Drei Secret-Stores synchron halten (OAuth-Cred-Wechsel):**
+
+Bei einem Wechsel von OAuth-Clients (z. B. neuer Cloud-Workspace, neuer Tenant) muessen drei Stellen aktualisiert werden — Vergessen einer Stelle → Refresh-Token-Failure mit kryptischer Fehlermeldung:
+
+1. **Vercel Env Vars** (Production + Preview + Development separat) → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_*`
+2. **Supabase Edge-Function Secrets** (`npx supabase secrets set ... --project-ref <ref>`) — Edge-Functions lesen aus diesem Store, nicht aus Vercel
+3. **Lokal `apps/web/.env.local`** via `npx vercel env pull apps/web/.env.local --yes` — sonst arbeitet localhost weiter mit alten Werten
+
+Vor jedem Sync-Test nach Cred-Wechsel pruefen: alle drei Stores haben den neuen Wert.
 
 ### Supabase (separater Lifecycle)
 
@@ -126,7 +146,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000   # lokal IMMER localhost, sonst brechen Auth-Callbacks
-DEFAULT_ORGANIZATION_SLUG=time-keeper
+DEFAULT_ORGANIZATION_SLUG=haiway
 OPENAI_RESEARCH_TIMEKEEPER_KEY=             # bevorzugt; OPENAI_API_KEY ist Fallback
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=

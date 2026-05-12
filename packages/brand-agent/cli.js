@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Brand-Agent CLI
 //
-// Lokal laufender Coding-Agent, der aus TimeKeeper-Daten brandkonforme
+// Lokal laufender Coding-Agent, der aus hAIway-Daten brandkonforme
 // Briefings (HTML, optional PPTX) erstellt. Nutzt:
 //   * /functions/v1/brand-manifest    → Brand Guidelines + AI-Settings
 //   * /functions/v1/chat-search       → Hybrid-Suche (oder direkter REST-Zugriff)

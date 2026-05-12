@@ -1,14 +1,14 @@
 <!--
-  Strategie-Paper TimeKeeper — Single Source of Truth.
+  Strategie-Paper hAIway — Single Source of Truth.
   Spiegelt sich in docs/strategie.html (Präsentationsversion). Beide synchron halten.
   Letzte Aktualisierung: 2026-04-09
 -->
 
-# TimeKeeper — Strategie
+# hAIway — Strategie
 
 ## 1. Nordstern
 
-**TimeKeeper ist ein KI-Betriebssystem für KMU. Wir verkaufen Ergebnisse, keine Software.**
+**hAIway ist ein KI-Betriebssystem für KMU. Wir verkaufen Ergebnisse, keine Software.**
 
 Der Kunde misst uns daran, ob seine manuelle Arbeit abnimmt, seine Prozesse schneller werden und seine Daten endlich miteinander reden — nicht daran, wie viele Features im Tool stecken.
 

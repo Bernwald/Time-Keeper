@@ -11,8 +11,8 @@ type ShellProps = {
 };
 
 export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellProps) {
-  const displayName = branding?.displayName ?? "Time Keeper";
-  const shortName = branding?.shortName ?? "TK";
+  const displayName = branding?.displayName ?? "hAIway";
+  const shortName = branding?.shortName ?? "hAI";
 
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row">

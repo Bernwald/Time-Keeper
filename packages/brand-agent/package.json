@@ -1,9 +1,9 @@
 {
-  "name": "@timekeeper/brand-agent",
+  "name": "@haiway/brand-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lokaler Coding-Agent fuer brandkonforme Briefings (HTML/PPTX) auf Basis von TimeKeeper-Daten.",
+  "description": "Lokaler Coding-Agent fuer brandkonforme Briefings (HTML/PPTX) auf Basis von hAIway-Daten.",
   "bin": {
     "brand-agent": "./cli.js"
   },

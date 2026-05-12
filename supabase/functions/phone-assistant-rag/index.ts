@@ -711,7 +711,7 @@ async function searchKnowledgeForContact(
   return searchResult;
 }
 
-/** Resolve the TimeKeeper user_id for a caller via phone number → contacts.user_id */
+/** Resolve the hAIway user_id for a caller via phone number → contacts.user_id */
 async function getCallerUserId(
   orgId: string,
   callerNumber: string,

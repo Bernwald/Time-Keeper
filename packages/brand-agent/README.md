@@ -1,6 +1,6 @@
-# @timekeeper/brand-agent
+# @haiway/brand-agent
 
-Lokal laufender CLI-Agent, der aus TimeKeeper-Daten brandkonforme Briefings erzeugt.
+Lokal laufender CLI-Agent, der aus hAIway-Daten brandkonforme Briefings erzeugt.
 
 ## Setup
 

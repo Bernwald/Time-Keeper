@@ -2,7 +2,7 @@
 //
 // Why this exists:
 //   On Vercel Preview deployments the URL changes per branch (e.g.
-//   time-keeper-git-feature-xxx.vercel.app). If OAuth redirect_uris are built
+//   haiway-git-feature-xxx.vercel.app). If OAuth redirect_uris are built
 //   from a hardcoded NEXT_PUBLIC_APP_URL pointing at production, the OAuth
 //   provider redirects the user back to production after consent and the
 //   preview never receives the code → login loop.
@@ -17,9 +17,9 @@
 // Important: every OAuth provider (Google, Microsoft) requires the
 // redirect_uri to be whitelisted. For preview deployments to work you must
 // add a wildcard / pattern in the provider's console, e.g.
-//   https://time-keeper-*-bernwald.vercel.app/auth/callback/gdrive
+//   https://haiway-*-haiway-consulting.vercel.app/auth/callback/gdrive
 // Google doesn't support wildcards — use a stable preview alias domain in
-// Vercel ("Git: feature branch" → assign alias like preview.time-keeper.io).
+// Vercel ("Git: feature branch" → assign alias like preview.haiway.io).
 
 export function getAppUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_APP_URL;

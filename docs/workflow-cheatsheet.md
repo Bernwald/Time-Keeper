@@ -110,7 +110,7 @@ triggern, Tests laufen lassen, ...) macht Claude oder die Plattform automatisch.
 
 ```
 PR oeffnen:           Claude macht das via `gh pr create`
-PR review:            https://github.com/Bernwald/Time-Keeper/pulls
+PR review:            https://github.com/hAIway-consulting/hAIway/pulls
 PR mergen:            Im PR oben rechts → "Squash and merge" → bestaetigen
 Branch loeschen:      Geht automatisch beim Squash-Merge mit "Delete branch"
                       (oder Claude raeumt es im Cleanup-Step auf)

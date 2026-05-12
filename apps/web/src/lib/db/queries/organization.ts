@@ -20,8 +20,8 @@ export type OrgBranding = {
 };
 
 const DEFAULT_BRANDING: OrgBranding = {
-  displayName: "Time Keeper",
-  shortName: "TK",
+  displayName: "hAIway",
+  shortName: "hAI",
   accentColor: "#0d9488",
   accentColorHover: "#0f766e",
   logoUrl: null,

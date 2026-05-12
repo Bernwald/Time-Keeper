@@ -1,5 +1,5 @@
 {
-  "name": "time-keeper-platform",
+  "name": "haiway-platform",
   "private": true,
   "workspaces": [
     "apps/*"

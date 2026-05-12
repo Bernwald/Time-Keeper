@@ -1,4 +1,4 @@
-# Supabase Auth E-Mail-Templates (TimeKeeper-Branding)
+# Supabase Auth E-Mail-Templates (hAIway-Branding)
 
 Die HTML-Dateien in diesem Ordner sind **Referenz-Vorlagen** für die Supabase-Auth-E-Mail-Templates. Sie werden **nicht vom Code geladen** — Supabase hält die aktiven Templates im Project-Dashboard vor. Wir versionieren sie hier, damit sie reviewbar und reproduzierbar sind.
 

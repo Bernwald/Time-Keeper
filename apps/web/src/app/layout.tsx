@@ -26,7 +26,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Time Keeper",
+  title: "hAIway",
   description: "AI-Ready Knowledge & Operations Platform",
 };
 

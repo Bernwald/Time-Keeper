@@ -3,8 +3,6 @@
     "allow": [
       "mcp__claude_ai_Supabase__execute_sql",
       "mcp__claude_ai_Supabase__apply_migration",
-      "mcp__claude_ai_Supabase__list_tables",
-      "mcp__claude_ai_Supabase__list_projects",
       "mcp__claude_ai_Vercel__web_fetch_vercel_url",
       "Bash(supabase db:*)",
       "Bash(where supabase:*)",
@@ -12,12 +10,26 @@
       "Bash(npm install:*)",
       "Bash(python3 -c:*)",
       "Bash(node -e:*)",
-      "Bash(node --env-file=*)",
-      "Bash(node scripts/*)",
-      "Bash(npx playwright:*)",
       "mcp__scheduled-tasks__list_scheduled_tasks",
       "mcp__scheduled-tasks__update_scheduled_task",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(curl *)",
+      "Bash(awk -F= '{print \"anon key length:\", length\\($2\\); print \"anon key prefix:\", substr\\($2,1,20\\)\"...\"}')",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(Stop-Process *)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "mcp__plugin_supabase_supabase__apply_migration",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "mcp__plugin_supabase_supabase__deploy_edge_function",
+      "mcp__plugin_supabase_supabase__get_advisors",
+      "mcp__plugin_supabase_supabase__get_logs",
+      "mcp__claude_ai_Vercel__list_teams",
+      "Bash(git fetch *)",
+      "Bash(git worktree *)"
     ]
   }
 }
