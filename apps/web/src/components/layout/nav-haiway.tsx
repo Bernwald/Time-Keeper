@@ -4,7 +4,6 @@ import {
   IconHome,
   IconUsers,
   IconChart,
-  IconBox,
   IconBuilding,
   IconPlug,
   IconAdmin,
@@ -18,7 +17,7 @@ import {
  * Operatives + strategisches Cockpit für unser Team. Gruppen:
  *  - Mission Control (Status + Plattform-Health)
  *  - Kunden (Pilotkunden)
- *  - Plattform (Integrationen, KI-Settings, Retrieval, Tags)
+ *  - Plattform (Integrationen, KI-Settings, Retrieval)
  */
 const groups: NavGroup[] = [
   {
@@ -35,7 +34,6 @@ const groups: NavGroup[] = [
       { href: "/admin/integrationen", label: "Datenquellen + Sync", icon: IconPlug },
       { href: "/admin/ai-settings", label: "Chat-Verhalten", icon: IconAdmin },
       { href: "/admin/retrieval-qualitaet", label: "Retrieval-Qualität", icon: IconChart },
-      { href: "/admin/tags", label: "Stamm-Tags", icon: IconBox },
     ],
   },
 ];
