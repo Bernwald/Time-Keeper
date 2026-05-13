@@ -10,15 +10,12 @@ import {
   chunksBySourceIds,
   searchOperationalEntities,
   listAllChunksByType,
-  listEntitiesByTag,
   enrichChunksWithFormulaWarnings,
   type ChunkSearchResult,
 } from "@/lib/db/queries/search";
 import {
   resolveEntities,
   getBoostSourceIds,
-  findMatchingTags,
-  getSourceIdsForTags,
 } from "@/lib/ai/entity-resolver";
 import {
   generateAnswer,
@@ -79,19 +76,6 @@ function detectListingIntent(q: string): {
   // entity-style sources (text) plus documents.
   if (types.length === 0) types.push("text", "document");
   return { isListing: true, types };
-}
-
-// Decide which of the three CRM entity tables an entity-first retrieval should
-// pull from, based on the noun(s) in the query. For "alle Kontakte" we only
-// want contacts; for "alle Kunden" we want both (colloquial). An empty array
-// means the entity-first path is skipped entirely.
-function entityTypesFromQuery(q: string): Array<"contact" | "company" | "project"> {
-  const s = q.toLowerCase();
-  const types: Array<"contact" | "company" | "project"> = [];
-  if (/kontakt|ansprech|lead|vertrieb|kunde|kunden|warm|kalt|lauwarm/.test(s)) types.push("contact");
-  if (/firma|firmen|unternehmen|kunde|kunden|account/.test(s)) types.push("company");
-  if (/projekt|projekte|auftrag|auftr(ä|ae)ge/.test(s)) types.push("project");
-  return Array.from(new Set(types));
 }
 
 // Fuse multiple ranked chunk lists via Reciprocal Rank Fusion.
@@ -302,41 +286,12 @@ export async function sendMessage(
   //    a single-variant run if expansion is unavailable.
   const variants = await expandQuery(searchQuery);
 
-  // 5. Entity-aware retrieval — union of
-  //    (a) sources linked to named entities in the query
-  //    (b) sources whose linked entity carries a tag matching the query
-  //    Tag matching lets "Pilot Kunden" boost all contacts tagged "Pilot"
-  //    without the user knowing the exact entity name.
-  const [entities, matchingTags] = await Promise.all([
-    resolveEntities(searchQuery),
-    findMatchingTags(searchQuery),
-  ]);
-  const [entityBoostIds, tagBoostIds] = await Promise.all([
-    getBoostSourceIds(entities),
-    getSourceIdsForTags(matchingTags.map((t) => t.id)),
-  ]);
-  const boostIds = Array.from(new Set([...entityBoostIds, ...tagBoostIds]));
+  // 5. Entity-aware retrieval — boost sources linked to named entities in
+  //    the query (companies / contacts / projects mentioned by name).
+  const entities = await resolveEntities(searchQuery);
+  const boostIds = await getBoostSourceIds(entities);
 
   const listing = detectListingIntent(trimmed);
-
-  // Entity-first retrieval: when the user asks for a LIST of CRM entities
-  // AND at least one tag in the query matches an org tag, we bypass hybrid
-  // ranking entirely and pull the matching rows straight from the DB via
-  // list_entities_by_tag. That guarantees a COMPLETE, exactly-filtered
-  // result set — the hybrid/operational/listing paths all rank and crop, so
-  // they silently drop entities at scale.
-  //
-  // When entity-first fires, its result gets tagged "entity_list" and the
-  // system prompt treats it as exhaustive. See lib/ai/chat.ts BASE_RULES.
-  const entityTypes = listing.isListing ? entityTypesFromQuery(trimmed) : [];
-  const entityList: ChunkSearchResult[] =
-    listing.isListing && matchingTags.length > 0 && entityTypes.length > 0
-      ? await listEntitiesByTag(
-          matchingTags.map((t) => t.id),
-          entityTypes,
-          LISTING_LIMIT,
-        )
-      : [];
 
   // For listing/counting questions we MUST bypass relevance ranking,
   // otherwise a long transcript can crowd out short entity sources
@@ -370,13 +325,10 @@ export async function sendMessage(
       ? "boost"
       : "hybrid";
 
-  // Order matters: entity_list first (it's a COMPLETE filtered list from the
-  // DB — the LLM must see it before any ranked/cropped chunks), then
-  // exhaustive type-dump, then operational pseudo-chunks, then semantic
-  // extras. Tag each source so the debug panel can show which retrieval arm
-  // surfaced each chunk.
+  // Order matters: exhaustive type-dump first, then operational pseudo-chunks,
+  // then semantic extras. Tag each source so the debug panel can show which
+  // retrieval arm surfaced each chunk.
   let chunks = dedupeChunks([
-    ...tagChunks(entityList, "entity_list"),
     ...tagChunks(exhaustive, "listing"),
     ...tagChunks(opEntities, "operational"),
     ...tagChunks(knowledgeChunks, knowledgeVia),
@@ -393,16 +345,10 @@ export async function sendMessage(
   // (single IN query) and only runs when chunks exist.
   chunks = await enrichChunksWithFormulaWarnings(chunks);
 
-  const entityParts: string[] = [];
-  if (entities.length > 0) {
-    entityParts.push(entities.map((e) => `${e.name} (${e.type})`).join(", "));
-  }
-  if (matchingTags.length > 0) {
-    entityParts.push(
-      `Tags: ${matchingTags.map((t) => t.name).join(", ")}`,
-    );
-  }
-  const entityContext = entityParts.length > 0 ? entityParts.join(" · ") : undefined;
+  const entityContext =
+    entities.length > 0
+      ? entities.map((e) => `${e.name} (${e.type})`).join(", ")
+      : undefined;
 
   // 5. Generate answer (multi-turn, with system prompt)
   const response = await generateAnswer({
