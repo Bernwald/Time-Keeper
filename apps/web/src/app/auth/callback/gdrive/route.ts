@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveGdriveTokens } from "@/app/quellen/actions";
+import { saveGdriveTokens, triggerInitialSync } from "@/app/quellen/actions";
 import { getAppUrl } from "@/lib/app-url";
 
 export async function GET(req: Request) {
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = `${getAppUrl()}/auth/callback/gdrive`;
+  const redirectUri = `${await getAppUrl()}/auth/callback/gdrive`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(new URL("/quellen?error=misconfigured", req.url));
@@ -56,5 +56,19 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL(`/quellen?error=save:${msg}`, req.url));
   }
 
-  return NextResponse.redirect(new URL("/quellen?connected=gdrive", req.url));
+  // Initial-Sync direkt nach OAuth-Connect anstoßen — sonst muss der User
+  // manuell auf "Jetzt synchronisieren" klicken und sieht bis dahin die
+  // Stale-Warnung. triggerInitialSync redirected selbst auf /admin/integrationen
+  // mit Erfolg- bzw. Fehler-Query-Param.
+  try {
+    await triggerInitialSync("google_drive");
+  } catch (e) {
+    // triggerInitialSync redirected immer — wenn wir hier landen, dann nur
+    // weil Next.js den Redirect als Exception wirft. Das ist erwünscht.
+    if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e;
+    console.error("[gdrive callback] initial-sync failed:", e);
+    return NextResponse.redirect(new URL("/admin/integrationen?connected=gdrive&sync_error=1", req.url));
+  }
+  // Unreachable — triggerInitialSync redirects in allen Fällen.
+  return NextResponse.redirect(new URL("/admin/integrationen?connected=gdrive", req.url));
 }

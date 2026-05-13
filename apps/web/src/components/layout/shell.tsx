@@ -1,18 +1,22 @@
 import Link from "next/link";
-import { Nav, MobileNav } from "./nav";
+import { MobileNav } from "./nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Wordmark } from "./wordmark";
 import type { OrgBranding } from "@/lib/db/queries/organization";
+import type { ReactNode } from "react";
 
 type ShellProps = {
-  children: React.ReactNode;
+  children: ReactNode;
   branding?: OrgBranding;
-  isAdmin?: boolean;
-  hasPhoneAssistant?: boolean;
+  /** Sidebar navigation slot — pass nav-haiway, nav-berater, or nav-workspace. */
+  nav: ReactNode;
+  /** Mobile bottom-nav items; defaults to workspace items. */
+  mobileNav?: ReactNode;
 };
 
-export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellProps) {
-  const displayName = branding?.displayName ?? "Time Keeper";
-  const shortName = branding?.shortName ?? "TK";
+export function Shell({ children, branding, nav, mobileNav }: ShellProps) {
+  const displayName = branding?.displayName ?? "HAIway";
+  const shortName = branding?.shortName ?? "HA";
 
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row">
@@ -34,12 +38,11 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
               {shortName}
             </div>
             <div className="flex flex-col">
-              <span
+              <Wordmark
+                name={displayName}
                 className="text-[15px] font-semibold leading-tight"
                 style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-              >
-                {displayName}
-              </span>
+              />
               <span className="text-[11px] leading-tight" style={{ color: "var(--color-placeholder)" }}>
                 Knowledge Platform
               </span>
@@ -47,9 +50,7 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
           </Link>
         </div>
 
-        <div className="flex-1 px-3 py-3 overflow-y-auto">
-          <Nav isAdmin={isAdmin} hasPhoneAssistant={hasPhoneAssistant} />
-        </div>
+        <div className="flex-1 px-3 py-3 overflow-y-auto">{nav}</div>
 
         <div className="p-4 border-t" style={{ borderColor: "var(--color-line)" }}>
           <div className="flex items-center justify-between">
@@ -80,12 +81,11 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
           >
             {shortName}
           </div>
-          <span
+          <Wordmark
+            name={displayName}
             className="text-sm font-semibold"
             style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}
-          >
-            {displayName}
-          </span>
+          />
         </Link>
         <div className="flex items-center gap-1">
           <ThemeToggle />
@@ -123,7 +123,7 @@ export function Shell({ children, branding, isAdmin, hasPhoneAssistant }: ShellP
         {children}
       </main>
 
-      <MobileNav />
+      {mobileNav ?? <MobileNav />}
     </div>
   );
 }

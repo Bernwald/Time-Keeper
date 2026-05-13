@@ -6,9 +6,24 @@ import { NextResponse, type NextRequest } from "next/server";
 // Playwright smoke tests. Hard-disabled outside development — production
 // returns 404 even if the file ships.
 
+// Test-User für lokale Persona-Validierung. Alle existieren in der Prod-DB
+// (siehe project_test_users-Memory). Der Endpoint bleibt strikt dev-only —
+// Prod gibt 404, also keine Login-Bypass-Gefahr.
+//
+//  claude-tester  → role 'admin' in claude-test Sandbox  → Persona "berater"
+//  max            → role 'member' in time-keeper Prod    → Persona "workspace"
+//  anna           → role 'member' in time-keeper Prod    → Persona "workspace"
 const TEST_USERS = {
   "claude-tester": {
     email: "claude-tester@bernwald.net",
+    password: "Test1234!",
+  },
+  max: {
+    email: "tkleiter2026@gmail.com",
+    password: "Test1234!",
+  },
+  anna: {
+    email: "tkmitarbeiterin2026@gmail.com",
     password: "Test1234!",
   },
 } as const;

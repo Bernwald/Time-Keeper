@@ -10,7 +10,7 @@ export async function connectSharepoint(): Promise<void> {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const tenantId = process.env.MICROSOFT_TENANT_ID || "common";
   if (!clientId) throw new Error("MICROSOFT_CLIENT_ID not set");
-  const redirectUri = `${getAppUrl()}/auth/callback/sharepoint`;
+  const redirectUri = `${await getAppUrl()}/auth/callback/sharepoint`;
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
@@ -26,7 +26,7 @@ export async function connectSharepoint(): Promise<void> {
 export async function connectGdrive(): Promise<void> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("GOOGLE_CLIENT_ID not set");
-  const redirectUri = `${getAppUrl()}/auth/callback/gdrive`;
+  const redirectUri = `${await getAppUrl()}/auth/callback/gdrive`;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,

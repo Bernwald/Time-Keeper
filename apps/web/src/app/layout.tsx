@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, DM_Sans } from "next/font/google";
 import "./globals.css";
-import { Shell } from "@/components/layout/shell";
+import { WorkspaceShell } from "@/components/layout/workspace-shell";
+import { NavWorkspace } from "@/components/layout/nav-workspace";
+import { NavBerater } from "@/components/layout/nav-berater";
+import { NavHaiway } from "@/components/layout/nav-haiway";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { getSession } from "@/lib/db/supabase-server";
-import { getOrgBranding, isPlatformAdmin } from "@/lib/db/queries/organization";
+import { createUserClient, getSession } from "@/lib/db/supabase-server";
+import { getOrgBranding, getOrganization, isPlatformAdmin } from "@/lib/db/queries/organization";
+import { getMemberRole } from "@/lib/db/org-context";
 import { hasFeature } from "@/lib/features/flags";
 
 const fraunces = Fraunces({
@@ -26,29 +30,64 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Time Keeper",
+  title: "hAIway",
   description: "AI-Ready Knowledge & Operations Platform",
 };
+
+type Persona = "haiway" | "berater" | "workspace";
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getSession();
   const user = session?.user ?? null;
 
   let branding = undefined;
-  let isAdmin = false;
+  let persona: Persona = "workspace";
+  let userName: string | null = null;
+  let contextLabel: string | null = null;
   let hasPhoneAssistant = false;
 
   if (user) {
     try {
-      [branding, isAdmin, hasPhoneAssistant] = await Promise.all([
+      const [b, platformAdmin, role, phoneFlag] = await Promise.all([
         getOrgBranding(),
         isPlatformAdmin(),
+        getMemberRole(),
         hasFeature("phone_assistant"),
       ]);
+      branding = b;
+      hasPhoneAssistant = phoneFlag;
+
+      if (platformAdmin) {
+        persona = "haiway";
+      } else if (role === "admin" || role === "owner") {
+        persona = "berater";
+      } else {
+        persona = "workspace";
+      }
+
+      const db = await createUserClient();
+      const { data } = await db.from("profiles").select("full_name").eq("id", user.id).single();
+      userName = data?.full_name ?? null;
+
+      if (persona === "berater") {
+        const org = await getOrganization().catch(() => null);
+        contextLabel = org?.name?.replace(/^\[[^\]]+\]\s*/, "").trim() || null;
+      } else if (persona === "haiway") {
+        contextLabel = "Intern";
+      }
     } catch {
-      // User may not have org membership yet (onboarding)
+      // User has no org membership yet (onboarding)
     }
   }
+
+  const sidebar =
+    persona === "haiway" ? (
+      <NavHaiway />
+    ) : persona === "berater" ? (
+      <NavBerater hasPhoneAssistant={hasPhoneAssistant} />
+    ) : (
+      <NavWorkspace hasPhoneAssistant={hasPhoneAssistant} />
+    );
 
   return (
     <html lang="de" className={`${fraunces.variable} ${dmSans.variable}`} suppressHydrationWarning>
@@ -61,12 +100,17 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         <AuthProvider initialUser={user}>
-          {user ? (
-            <Shell branding={branding} isAdmin={isAdmin} hasPhoneAssistant={hasPhoneAssistant}>
-              {children}
-            </Shell>
-          ) : (
+          {!user ? (
             children
+          ) : (
+            <WorkspaceShell
+              branding={branding}
+              userName={userName}
+              contextLabel={contextLabel}
+              sidebar={sidebar}
+            >
+              {children}
+            </WorkspaceShell>
           )}
         </AuthProvider>
       </body>

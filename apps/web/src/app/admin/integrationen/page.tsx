@@ -1,4 +1,6 @@
-import { createServiceClient } from "@/lib/db/supabase-server";
+import { createServiceClient, createUserClient } from "@/lib/db/supabase-server";
+import { requireOrgId } from "@/lib/db/org-context";
+import { connectSharepoint, connectGdrive, triggerInitialSync } from "@/app/quellen/actions";
 import { replayJobFailureAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -42,31 +44,47 @@ interface KpiRow {
   avg_duration_ms:      number;
 }
 
-export default async function IntegrationsAdminPage() {
-  const supabase = createServiceClient();
+interface ConnectionRow {
+  provider_id: string;
+  status:      string;
+  updated_at:  string | null;
+}
 
-  const [{ data: runs }, { data: failures }, { data: kpis }] = await Promise.all([
+export default async function IntegrationsAdminPage() {
+  const orgId = await requireOrgId();
+  const supabase = createServiceClient();
+  const userClient = await createUserClient();
+
+  const [{ data: runs }, { data: failures }, { data: kpis }, { data: connections }] = await Promise.all([
     supabase
       .from("integration_runs")
       .select("*")
+      .eq("organization_id", orgId)
       .order("started_at", { ascending: false })
       .limit(50),
     supabase
       .from("job_failures")
       .select("*")
+      .eq("organization_id", orgId)
       .is("replayed_at", null)
       .order("failed_at", { ascending: false })
       .limit(50),
     supabase
       .from("integration_kpi_daily")
       .select("*")
+      .eq("organization_id", orgId)
       .order("day", { ascending: false })
       .limit(14),
+    userClient
+      .from("organization_integrations")
+      .select("provider_id, status, updated_at")
+      .eq("organization_id", orgId),
   ]);
 
   const runRows:     RunRow[]     = (runs     ?? []) as RunRow[];
   const failureRows: FailureRow[] = (failures ?? []) as FailureRow[];
   const kpiRows:     KpiRow[]     = (kpis     ?? []) as KpiRow[];
+  const connectionRows: ConnectionRow[] = (connections ?? []) as ConnectionRow[];
 
   const totals = kpiRows.reduce(
     (acc, k) => ({
@@ -78,23 +96,79 @@ export default async function IntegrationsAdminPage() {
     { runs: 0, success: 0, failed: 0, records: 0 },
   );
 
+  const connectionByProvider = new Map(connectionRows.map((c) => [c.provider_id, c] as const));
+
   return (
     <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-placeholder)" }}>
+          Integrationen
+        </span>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)", color: "var(--color-text)" }}>
+          Datenquellen verbinden + Sync-Status
+        </h1>
+        <p className="text-[13px]" style={{ color: "var(--color-muted)" }}>
+          Verknüpfe SharePoint, OneDrive oder Google Drive mit deiner Org. Pipeline-Logs und Fehler stehen darunter.
+        </p>
+      </header>
+
+      {/* Connect-Cards */}
+      <section>
+        <h2 className="text-[12px] font-semibold uppercase tracking-widest mb-3" style={{ color: "var(--color-placeholder)" }}>
+          Datenquellen anbinden
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+          <ConnectorCard
+            providerId="sharepoint"
+            name="SharePoint"
+            description="Microsoft 365 Sites + Dokumentenbibliotheken via Microsoft Graph."
+            connection={connectionByProvider.get("sharepoint") ?? null}
+            connectAction={connectSharepoint}
+            syncProviderId="sharepoint"
+            color="#0078D4"
+          />
+          <ConnectorCard
+            providerId="onedrive"
+            name="OneDrive"
+            description="Persönliche + Team-OneDrive — nutzt denselben Microsoft-Login wie SharePoint."
+            connection={connectionByProvider.get("onedrive") ?? null}
+            connectAction={connectSharepoint}
+            syncProviderId="sharepoint"
+            color="#0078D4"
+            note="Anbindung läuft über den gemeinsamen Microsoft-OAuth-Flow (SharePoint-Tenant)."
+          />
+          <ConnectorCard
+            providerId="google_drive"
+            name="Google Drive"
+            description="Shared Drives + persönliche Drives via Google OAuth."
+            connection={connectionByProvider.get("google_drive") ?? null}
+            connectAction={connectGdrive}
+            syncProviderId="google_drive"
+            color="#1A73E8"
+          />
+        </div>
+      </section>
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Läufe (14 T.)"     value={totals.runs} />
-        <StatCard label="Erfolgreich"       value={totals.success} />
-        <StatCard label="Fehlgeschlagen"    value={totals.failed} tone="warn" />
-        <StatCard label="Records verarbeitet" value={totals.records} />
-      </div>
+      <section>
+        <h2 className="text-[12px] font-semibold uppercase tracking-widest mb-3" style={{ color: "var(--color-placeholder)" }}>
+          Pipeline-Status (14 Tage)
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <StatCard label="Läufe"          value={totals.runs} />
+          <StatCard label="Erfolgreich"    value={totals.success} />
+          <StatCard label="Fehlgeschlagen" value={totals.failed} tone="warn" />
+          <StatCard label="Records ok"     value={totals.records} />
+        </div>
+      </section>
 
       {/* Recent runs */}
       <Panel title="Letzte Sync-Läufe">
         {runRows.length === 0 ? (
-          <Empty text="Noch keine Sync-Läufe." />
+          <Empty text="Noch keine Sync-Läufe — verbinde oben eine Datenquelle und starte den ersten Sync." />
         ) : (
           <ul className="flex flex-col gap-2">
-            {runRows.map((r) => (
+            {runRows.slice(0, 12).map((r) => (
               <li
                 key={r.id}
                 className="rounded-lg p-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-4 min-h-[44px]"
@@ -169,10 +243,98 @@ export default async function IntegrationsAdminPage() {
   );
 }
 
+function ConnectorCard({
+  providerId,
+  name,
+  description,
+  connection,
+  connectAction,
+  syncProviderId,
+  color,
+  note,
+}: {
+  providerId: string;
+  name: string;
+  description: string;
+  connection: ConnectionRow | null;
+  connectAction: () => Promise<void>;
+  syncProviderId: "sharepoint" | "google_drive";
+  color: string;
+  note?: string;
+}) {
+  const isConnected = connection?.status === "connected" || connection?.status === "active";
+  const syncAction = triggerInitialSync.bind(null, syncProviderId);
+  return (
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-3"
+      style={{ background: "var(--color-panel)", border: "1px solid var(--color-line)", boxShadow: "var(--shadow-sm)" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="text-[15px] font-semibold" style={{ color: "var(--color-text)" }}>
+            {name}
+          </span>
+          <span className="text-[12px] leading-snug" style={{ color: "var(--color-muted)" }}>
+            {description}
+          </span>
+        </div>
+        <span
+          className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center text-[12px] font-bold"
+          style={{ background: `${color}18`, color }}
+          aria-hidden
+        >
+          {name.slice(0, 2).toUpperCase()}
+        </span>
+      </div>
+
+      {note && (
+        <span className="text-[11px]" style={{ color: "var(--color-placeholder)" }}>
+          {note}
+        </span>
+      )}
+
+      <div className="flex items-center justify-between gap-3 mt-auto pt-2 border-t" style={{ borderColor: "var(--color-line-soft)" }}>
+        <span className="text-[11px]" style={{ color: isConnected ? "var(--color-success)" : "var(--color-placeholder)" }}>
+          {isConnected
+            ? `Verbunden${connection?.updated_at ? " · " + new Date(connection.updated_at).toLocaleDateString("de-DE") : ""}`
+            : "Nicht verbunden"}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {isConnected && (
+            <form action={syncAction}>
+              <button
+                type="submit"
+                className="min-h-[36px] px-3 rounded-lg text-[12px] font-semibold"
+                style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)" }}
+              >
+                Jetzt synchronisieren
+              </button>
+            </form>
+          )}
+          <form action={connectAction}>
+            <button
+              type="submit"
+              className="min-h-[36px] px-3 rounded-lg text-[12px] font-semibold"
+              style={{
+                background: isConnected ? "var(--color-bg-elevated)" : "var(--color-accent)",
+                color: isConnected ? "var(--color-text)" : "var(--color-accent-text)",
+                border: isConnected ? "1px solid var(--color-line)" : "none",
+              }}
+            >
+              {isConnected ? "Neu verbinden" : `${name} verbinden`}
+            </button>
+          </form>
+        </div>
+      </div>
+      <span hidden data-provider-id={providerId} />
+    </div>
+  );
+}
+
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
-      className="rounded-xl p-5"
+      className="rounded-2xl p-5"
       style={{ background: "var(--color-panel)", border: "1px solid var(--color-line)" }}
     >
       <h2
@@ -197,12 +359,14 @@ function StatCard({
 }) {
   return (
     <div
-      className="rounded-xl p-5"
+      className="rounded-2xl p-5"
       style={{ background: "var(--color-panel)", border: "1px solid var(--color-line)" }}
     >
-      <p className="text-sm" style={{ color: "var(--color-muted)" }}>{label}</p>
+      <p className="text-[11px] uppercase tracking-widest" style={{ color: "var(--color-placeholder)" }}>
+        {label}
+      </p>
       <p
-        className="text-3xl font-semibold mt-1"
+        className="text-2xl md:text-3xl font-bold mt-1"
         style={{
           fontFamily: "var(--font-display)",
           color: tone === "warn" && value > 0 ? "var(--color-danger)" : "var(--color-text)",

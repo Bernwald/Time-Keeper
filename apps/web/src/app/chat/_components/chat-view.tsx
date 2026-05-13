@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { sendMessage } from "../actions";
 import type { ConversationListItem, StoredMessage } from "../actions";
 import type { ChatResponse, ModelId } from "@/lib/ai/chat";
 import { card, badge, btn, input, styles } from "@/components/ui/table-classes";
 import RetrievalDebug from "./retrieval-debug";
+import { ChatComposer } from "./chat-composer";
 
 type ModelOption = { id: ModelId; label: string; available: boolean };
+type ChatViewVariant = "default" | "workspace";
 
 type LocalSource = {
   source_title?: string;
@@ -70,6 +73,7 @@ export default function ChatView({
   models,
   isAdmin,
   onOpenDrawer,
+  variant = "default",
 }: {
   conversationId: string;
   conversation: ConversationListItem;
@@ -77,7 +81,9 @@ export default function ChatView({
   models: ModelOption[];
   isAdmin: boolean;
   onOpenDrawer: () => void;
+  variant?: ChatViewVariant;
 }) {
+  const isWorkspace = variant === "workspace";
   const router = useRouter();
   const [messages, setMessages] = useState<LocalMessage[]>(
     initialMessages.map(toLocal),
@@ -105,9 +111,7 @@ export default function ChatView({
     setPending(false);
   }, [conversationId, initialMessages]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const q = question.trim();
+  async function send(q: string) {
     if (!q || pending) return;
 
     const tempId = `temp-${Date.now()}`;
@@ -116,7 +120,6 @@ export default function ChatView({
       { id: tempId, role: "user", content: q, sources: [] },
       { id: `${tempId}-a`, role: "assistant", content: "", sources: [], pending: true },
     ]);
-    setQuestion("");
     setPending(true);
 
     try {
@@ -166,63 +169,88 @@ export default function ChatView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div
-        className="shrink-0 px-4 md:px-6 py-3 border-b flex items-center gap-3"
-        style={{
-          borderColor: "var(--color-line-soft)",
-          background: "var(--color-panel)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onOpenDrawer}
-          className="md:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg"
-          style={{ color: "var(--color-text)" }}
-          aria-label="Chats anzeigen"
-        >
-          {/* hamburger */}
-          <span className="block w-5 h-0.5 bg-current relative before:absolute before:-top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-current after:absolute after:top-1.5 after:left-0 after:right-0 after:h-0.5 after:bg-current" />
-        </button>
-
-        <div className="flex-1 min-w-0">
+      {isWorkspace ? (
+        <div className="shrink-0 px-4 md:px-8 pt-6 pb-4 flex items-center gap-3 max-w-3xl mx-auto w-full">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center min-h-[36px] min-w-[36px] rounded-lg shrink-0"
+            style={{ color: "var(--color-muted)" }}
+            aria-label="Zurück zur Übersicht"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+          </Link>
           <h1
-            className="text-base md:text-lg font-semibold truncate"
+            className="flex-1 min-w-0 truncate text-base md:text-lg font-semibold"
             style={styles.title}
           >
             {conversation.title}
           </h1>
         </div>
+      ) : (
+        <div
+          className="shrink-0 px-4 md:px-6 py-3 border-b flex items-center gap-3"
+          style={{
+            borderColor: "var(--color-line-soft)",
+            background: "var(--color-panel)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onOpenDrawer}
+            className="md:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg"
+            style={{ color: "var(--color-text)" }}
+            aria-label="Chats anzeigen"
+          >
+            <span className="block w-5 h-0.5 bg-current relative before:absolute before:-top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-current after:absolute after:top-1.5 after:left-0 after:right-0 after:h-0.5 after:bg-current" />
+          </button>
 
-        {models.length > 0 && (
-          <div className="hidden sm:flex items-center gap-1.5">
-            {models.filter((m) => m.available).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setSelectedModel(m.id)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all min-h-[36px]"
-                style={{
-                  background:
-                    selectedModel === m.id
-                      ? "var(--color-accent)"
-                      : "var(--color-bg-elevated)",
-                  color:
-                    selectedModel === m.id
-                      ? "var(--color-accent-text)"
-                      : "var(--color-muted)",
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
+          <div className="flex-1 min-w-0">
+            <h1
+              className="text-base md:text-lg font-semibold truncate"
+              style={styles.title}
+            >
+              {conversation.title}
+            </h1>
           </div>
-        )}
-      </div>
+
+          {models.length > 0 && (
+            <div className="hidden sm:flex items-center gap-1.5">
+              {models.filter((m) => m.available).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectedModel(m.id)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all min-h-[36px]"
+                  style={{
+                    background:
+                      selectedModel === m.id
+                        ? "var(--color-accent)"
+                        : "var(--color-bg-elevated)",
+                    color:
+                      selectedModel === m.id
+                        ? "var(--color-accent-text)"
+                        : "var(--color-muted)",
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4"
+        className={
+          isWorkspace
+            ? "flex-1 overflow-y-auto px-4 md:px-8 py-2 flex flex-col gap-4 w-full max-w-3xl mx-auto"
+            : "flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4"
+        }
       >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center py-12 animate-scale-in">
@@ -331,39 +359,54 @@ export default function ChatView({
       </div>
 
       {/* Input */}
-      <div
-        className="shrink-0 px-4 md:px-6 py-3 border-t pb-[calc(12px+env(safe-area-inset-bottom))] md:pb-3"
-        style={{
-          borderColor: "var(--color-line-soft)",
-          background: "var(--color-panel)",
-        }}
-      >
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Frage stellen …"
-            disabled={pending}
-            className={input.base}
-            style={{
-              ...styles.input,
-              flex: 1,
-              borderColor: "var(--color-line-soft)",
+      {isWorkspace ? (
+        <div className="shrink-0 px-4 md:px-8 py-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+          <ChatComposer pending={pending} onSubmit={(text) => send(text)} />
+        </div>
+      ) : (
+        <div
+          className="shrink-0 px-4 md:px-6 py-3 border-t pb-[calc(12px+env(safe-area-inset-bottom))] md:pb-3"
+          style={{
+            borderColor: "var(--color-line-soft)",
+            background: "var(--color-panel)",
+          }}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = question.trim();
+              if (!q) return;
+              setQuestion("");
+              void send(q);
             }}
-          />
-          <button
-            type="submit"
-            disabled={pending || !question.trim()}
-            className={btn.primary}
-            style={{
-              ...styles.accent,
-              opacity: pending || !question.trim() ? 0.5 : 1,
-            }}
+            className="flex gap-2"
           >
-            Senden
-          </button>
-        </form>
-      </div>
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Frage stellen …"
+              disabled={pending}
+              className={input.base}
+              style={{
+                ...styles.input,
+                flex: 1,
+                borderColor: "var(--color-line-soft)",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={pending || !question.trim()}
+              className={btn.primary}
+              style={{
+                ...styles.accent,
+                opacity: pending || !question.trim() ? 0.5 : 1,
+              }}
+            >
+              Senden
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

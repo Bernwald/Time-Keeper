@@ -1,6 +1,8 @@
 import { cache } from "react";
 import { createUserClient, getUser } from "./supabase-server";
 
+export type MemberRole = "member" | "admin" | "owner";
+
 /**
  * Returns the active organization ID for the current request.
  *
@@ -43,3 +45,46 @@ export const requireOrgId = cache(async (): Promise<string> => {
 
   throw new Error("User has no organization membership");
 });
+
+/**
+ * Returns the current user's role in the given org (or active org if omitted).
+ * Returns null if the user is not a member or not authenticated.
+ */
+export const getMemberRole = cache(async (orgId?: string): Promise<MemberRole | null> => {
+  const user = await getUser();
+  if (!user) return null;
+
+  let targetOrgId = orgId;
+  if (!targetOrgId) {
+    try {
+      targetOrgId = await requireOrgId();
+    } catch {
+      return null;
+    }
+  }
+
+  const supabase = await createUserClient();
+  const { data } = await supabase
+    .from("organization_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("organization_id", targetOrgId)
+    .single();
+
+  if (!data) return null;
+  const role = data.role as string;
+  if (role === "member" || role === "admin" || role === "owner") return role;
+  return null;
+});
+
+/**
+ * Throws unless the current user has admin or owner role in the active org.
+ * Used to gate the Berater-Cockpit (`/admin/*` route group).
+ */
+export async function requireBeraterRole(): Promise<MemberRole> {
+  const role = await getMemberRole();
+  if (role !== "admin" && role !== "owner") {
+    throw new Error("Forbidden: berater role required");
+  }
+  return role;
+}

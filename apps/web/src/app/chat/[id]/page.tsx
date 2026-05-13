@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { getConversation, listConversations, getAvailableModels } from "../actions";
+import { getConversation, listConversations, listMyConversations, getAvailableModels } from "../actions";
 import { isPlatformAdmin } from "@/lib/db/queries/organization";
+import { getMemberRole } from "@/lib/db/org-context";
 import ChatLayout from "../_components/chat-layout";
 
 export default async function ChatConversationPage({
@@ -10,11 +11,19 @@ export default async function ChatConversationPage({
 }) {
   const { id } = await params;
 
-  const [data, conversations, models, isAdmin] = await Promise.all([
+  // Workspace-Persona (End-User) bekommt den minimalen Chat-Look ohne Sidebar
+  // — die "Letzte Chats"-Liste lebt schon auf der Home. Berater + HAIway
+  // sehen weiterhin die volle Sidebar-Variante mit Audit-Sicht.
+  const [admin, role] = await Promise.all([
+    isPlatformAdmin().catch(() => false),
+    getMemberRole().catch(() => null),
+  ]);
+  const isWorkspace = !admin && role !== "admin" && role !== "owner";
+
+  const [data, conversations, models] = await Promise.all([
     getConversation(id),
-    listConversations(50),
+    isWorkspace ? listMyConversations(50) : listConversations(50),
     getAvailableModels(),
-    isPlatformAdmin(),
   ]);
 
   if (!data) notFound();
@@ -26,7 +35,8 @@ export default async function ChatConversationPage({
       messages={data.messages}
       conversations={conversations}
       models={models}
-      isAdmin={isAdmin}
+      isAdmin={admin}
+      variant={isWorkspace ? "workspace" : "default"}
     />
   );
 }
